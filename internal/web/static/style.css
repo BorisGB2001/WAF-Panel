@@ -127,6 +127,8 @@ body.bare main { padding: 16px; width: 100%; max-width: 380px; }
 
 /* tables */
 .scroll { overflow-x: auto; }
+/* An open row menu would be clipped by the scrolling table. */
+.scroll:has(details.inline[open]) { overflow: visible; }
 table { width: 100%; border-collapse: collapse; }
 th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); padding: 8px 10px; }
 td { border-bottom: 1px solid var(--line); padding: 8px 10px; vertical-align: top; }

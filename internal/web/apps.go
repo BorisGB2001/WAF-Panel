@@ -43,15 +43,15 @@ func splitList(s string) []string {
 
 // appForm is the form as typed, kept to re-render it after an error.
 type appForm struct {
-	Title, Comment, Names, Ports, Upstreams string
-	Balance, CertID                         int
-	Mode                                    int // initial mode of a new site
-	HealthCheck                             bool
-	Reason                                  string
+	Comment, Names, Ports, Upstreams string
+	Balance, CertID                  int
+	Mode                             int // initial mode of a new site
+	HealthCheck                      bool
+	Reason                           string
 }
 
 func formFromRequest(r *http.Request) appForm {
-	f := appForm{Title: strings.TrimSpace(r.FormValue("title")), Comment: strings.TrimSpace(r.FormValue("comment")),
+	f := appForm{Comment: strings.TrimSpace(r.FormValue("comment")),
 		Names: r.FormValue("names"), Ports: r.FormValue("ports"), Upstreams: r.FormValue("upstreams"),
 		HealthCheck: r.FormValue("health_check") == "on", Reason: strings.TrimSpace(r.FormValue("reason"))}
 	f.Balance, _ = strconv.Atoi(r.FormValue("balance"))
@@ -64,7 +64,7 @@ func formFromRequest(r *http.Request) appForm {
 }
 
 func formFromDetail(d safeline.SiteDetail) appForm {
-	f := appForm{Title: d.Str("title"), Comment: d.Str("comment"), Names: strings.Join(d.Strings("server_names"), "\n"),
+	f := appForm{Comment: d.Str("comment"), Names: strings.Join(d.Strings("server_names"), "\n"),
 		Upstreams: strings.Join(d.Strings("upstreams"), "\n"), CertID: d.Int("cert_id"), HealthCheck: d.Bool("health_check"), Balance: 1}
 	var ports []string
 	for _, p := range d.Strings("ports") {
@@ -81,7 +81,7 @@ func formFromDetail(d safeline.SiteDetail) appForm {
 
 // spec validates the form against the instance's sites and certificates.
 func (f appForm) spec(selfID int, sites []safeline.Site, certs []safeline.Cert) (safeline.SiteSpec, error) {
-	s := safeline.SiteSpec{Title: f.Title, Comment: f.Comment, BalanceType: f.Balance, CertID: f.CertID, HealthCheck: f.HealthCheck}
+	s := safeline.SiteSpec{Comment: f.Comment, BalanceType: f.Balance, CertID: f.CertID, HealthCheck: f.HealthCheck}
 	if s.BalanceType < 1 || s.BalanceType > 3 {
 		s.BalanceType = 1
 	}

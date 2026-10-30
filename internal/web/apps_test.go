@@ -120,7 +120,7 @@ func TestApps(t *testing.T) {
 		return resp.StatusCode, body(t, resp)
 	}
 	form := func(names, ports, ups string, cert string) url.Values {
-		return url.Values{"instance": {"prod"}, "title": {"New"}, "names": {names}, "ports": {ports}, "upstreams": {ups},
+		return url.Values{"instance": {"prod"}, "comment": {"New"}, "names": {names}, "ports": {ports}, "upstreams": {ups},
 			"cert_id": {cert}, "balance": {"1"}, "health_check": {"on"}, "reason": {"test"}}
 	}
 
@@ -153,6 +153,9 @@ func TestApps(t *testing.T) {
 	if n == nil || n["ports"].([]any)[1] != "8443_ssl" || n["type"].(float64) != 0 || len(n["upstreams"].([]any)) != 2 || n["mode"].(float64) != 2 {
 		t.Fatalf("created site %+v", n)
 	}
+	if _, has := n["title"]; has || n["comment"] != "New" {
+		t.Fatalf("name must go to comment, title is SafeLine's: %+v", n)
+	}
 
 	// Editing keeps fields the panel does not know and upstream weights.
 	if code, page := get(t, ts, c, "/apps/prod/4/edit"); code != 200 || !strings.Contains(page, "https://10.0.0.12:443") {
@@ -163,6 +166,9 @@ func TestApps(t *testing.T) {
 	}
 	upd := fake.sites[4]
 	ups := upd["load_balance"].(map[string]any)["upstreams"].([]any)
+	if upd["title"] != "IM" || upd["comment"] != "New" {
+		t.Fatalf("title %v, comment %v", upd["title"], upd["comment"])
+	}
 	if upd["forbidden_html_path"] != "/custom/403.html" || len(ups) != 2 || ups[0].(map[string]any)["weight"].(float64) != 5 {
 		t.Fatalf("update lost fields: %+v", upd)
 	}

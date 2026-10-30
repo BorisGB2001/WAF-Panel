@@ -59,7 +59,8 @@ func (c *Client) SiteDetail(ctx context.Context, id int) (SiteDetail, error) {
 
 // SiteSpec is what the panel edits on a reverse-proxy site.
 type SiteSpec struct {
-	Title       string
+	// Comment is the site's name in the console; "title" is not ours to set:
+	// mgt fills it from the <title> of the upstream page and overwrites it.
 	Comment     string
 	ServerNames []string
 	Ports       []string // "80", "443_ssl"
@@ -70,7 +71,6 @@ type SiteSpec struct {
 }
 
 func (s SiteSpec) apply(d SiteDetail) {
-	d["title"] = s.Title
 	d["comment"] = s.Comment
 	d["server_names"] = s.ServerNames
 	d["ports"] = s.Ports

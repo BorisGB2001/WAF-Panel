@@ -161,7 +161,6 @@ func niceStep(v float64) float64 {
 	return 10 * p
 }
 
-
 type slice struct {
 	Label string
 	Value int64

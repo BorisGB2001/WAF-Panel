@@ -5,8 +5,8 @@
   <input type="hidden" name="csrf" value="{{.CSRF}}">
   <input type="hidden" name="instance" value="{{$c.ID}}">
   <div class="grid2">
-    <label>{{t "Name"}}<input name="title" value="{{$f.Title}}" placeholder="Shop"></label>
-    <label>{{t "Comment"}}<input name="comment" value="{{$f.Comment}}" placeholder="frontend"></label>
+    <label>{{t "Name"}}<input name="comment" value="{{$f.Comment}}" placeholder="Shop"></label>
+    <p class="muted small">{{t "SafeLine shows the title of the upstream's home page next to it; that title cannot be set here."}}</p>
   </div>
   <div class="grid3">
     <label>{{t "Domains — one per line"}}<textarea name="names" rows="5" class="code" required placeholder="shop.example.com">{{$f.Names}}</textarea></label>
