@@ -269,3 +269,33 @@ func TestLanguageSwitch(t *testing.T) {
 		t.Fatal("open redirect")
 	}
 }
+
+func TestThemeSwitch(t *testing.T) {
+	ts, s, _ := newTestServer(t)
+	c := browser(ts)
+	pw, _ := os.ReadFile(filepath.Join(s.Cfg.Web.DataDir, "initial-admin-password"))
+	login(t, ts, c, "admin", strings.TrimSpace(string(pw)))
+	// The switches come back to the page they were used on, without its flash.
+	_, b := get(t, ts, c, "/attacks?period=7d&ok=done")
+	if strings.Contains(b, "data-theme=") || !strings.Contains(b, `href="/theme/dark?next=%2Fattacks%3Fperiod%3D7d"`) ||
+		!strings.Contains(b, `href="/lang/ru?next=%2Fattacks%3Fperiod%3D7d"`) {
+		t.Fatal("system theme by default, switches return to this page")
+	}
+	for theme, want := range map[string]string{"dark": `data-theme="dark"`, "light": `data-theme="light"`, "system": ""} {
+		resp, err := c.Get(ts.URL + "/theme/" + theme + "?next=/attacks")
+		if err != nil {
+			t.Fatal(err)
+		}
+		body(t, resp)
+		if loc := resp.Header.Get("Location"); resp.StatusCode != http.StatusSeeOther || loc != "/attacks" {
+			t.Fatalf("%s: %d %s", theme, resp.StatusCode, loc)
+		}
+		_, b := get(t, ts, c, "/attacks")
+		if (want == "" && strings.Contains(b, "data-theme=")) || (want != "" && !strings.Contains(b, want)) {
+			t.Errorf("%s not applied", theme)
+		}
+	}
+	if code, _ := get(t, ts, c, "/theme/pink"); code != http.StatusNotFound {
+		t.Fatal("unknown theme accepted")
+	}
+}

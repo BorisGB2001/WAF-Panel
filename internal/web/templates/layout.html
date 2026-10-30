@@ -1,5 +1,5 @@
 {{define "layout"}}<!doctype html>
-<html lang="{{.Lang}}">
+<html lang="{{.Lang}}"{{if .Theme}} data-theme="{{.Theme}}"{{end}}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -28,9 +28,11 @@
     {{end}}
   </nav>
   <div class="me">
-    <a href="/account" class="{{if eq .Active "account"}}on{{end}}">{{.User.Name}} <small>{{.User.Role}}</small></a>
-    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link">{{t "Sign out"}}</button></form>
-    {{template "langswitch" .}}
+    <div class="merow">
+      <a href="/account" class="who {{if eq .Active "account"}}on{{end}}">{{.User.Name}} <small>{{.User.Role}}</small></a>
+      <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" title="{{t "Sign out"}}">{{t "Sign out"}}</button></form>
+    </div>
+    {{template "prefs" .}}
     <small class="ver">{{.Version}}</small>
   </div>
 </aside>
@@ -45,4 +47,7 @@
 </body>
 </html>{{end}}
 
-{{define "langswitch"}}<span class="langs"><a href="/lang/en?next=/" class="{{if eq .Lang "en"}}on{{end}}">EN</a> · <a href="/lang/ru?next=/" class="{{if eq .Lang "ru"}}on{{end}}">RU</a></span>{{end}}
+{{define "prefs"}}<div class="prefs">
+  <span class="pseg" role="group" aria-label="{{t "Language"}}"><a href="/lang/en?next={{urlquery .Here}}" class="{{if eq .Lang "en"}}on{{end}}" {{if eq .Lang "en"}}aria-current="true"{{end}}>EN</a><a href="/lang/ru?next={{urlquery .Here}}" class="{{if eq .Lang "ru"}}on{{end}}" {{if eq .Lang "ru"}}aria-current="true"{{end}}>RU</a></span>
+  <span class="pseg" role="group" aria-label="{{t "Theme"}}"><a href="/theme/light?next={{urlquery .Here}}" class="{{if eq .Theme "light"}}on{{end}}" title="{{t "Light"}}" aria-label="{{t "Light"}}">☀</a><a href="/theme/system?next={{urlquery .Here}}" class="{{if eq .Theme ""}}on{{end}}" title="{{t "System"}}" aria-label="{{t "System"}}">◐</a><a href="/theme/dark?next={{urlquery .Here}}" class="{{if eq .Theme "dark"}}on{{end}}" title="{{t "Dark"}}" aria-label="{{t "Dark"}}">☾</a></span>
+</div>{{end}}

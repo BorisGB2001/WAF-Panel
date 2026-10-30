@@ -599,4 +599,9 @@ var ru = map[string]string{
 	"SafeLine's internal error pages": "внутренние страницы ошибок SafeLine",
 	"Other OS":                        "Другая ОС",
 	"Other client":                    "Другой клиент",
+	"Dark":                            "Тёмная",
+	"Language":                        "Язык",
+	"Light":                           "Светлая",
+	"System":                          "Как в системе",
+	"Theme":                           "Тема",
 }

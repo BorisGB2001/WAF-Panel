@@ -5,7 +5,8 @@
 # boris.gb 2026-10-30 16:42 - 0.7.1: header names in rule conditions, rules sharing a position are marked
 # boris.gb 2026-10-30 16:54 - 0.8.0: allow and deny lists with their own order, reordering
 # boris.gb 2026-10-30 18:15 - 0.9.0: traffic analytics from tengine's logs
-VERSION ?= 0.9.0
+# boris.gb 2026-10-30 18:58 - 0.9.1: theme switch (light, dark, system), compact language and theme switches
+VERSION ?= 0.9.1
 LDFLAGS = -s -w -X main.version=$(VERSION)
 
 .PHONY: build linux test

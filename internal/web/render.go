@@ -15,6 +15,8 @@ import (
 // page is the data every template gets; Data holds the page's own values.
 type page struct {
 	Lang    string
+	Theme   string // "light", "dark" or "" to follow the system
+	Here    string // this page, for the language and theme switches to come back to
 	Title   string
 	Active  string
 	User    auth.User
@@ -28,7 +30,15 @@ type page struct {
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, rc *reqCtx, name string, p page) {
-	p.Lang = langOf(r)
+	p.Lang, p.Theme = langOf(r), themeOf(r)
+	p.Here = r.URL.Path
+	if q := r.URL.Query(); r.Method == http.MethodGet && len(q) > 0 {
+		q.Del("ok") // a flash message is shown once
+		q.Del("err")
+		if len(q) > 0 {
+			p.Here += "?" + q.Encode()
+		}
+	}
 	t := s.pages[p.Lang][name]
 	if t == nil {
 		http.Error(w, "no template "+name, http.StatusInternalServerError)
@@ -145,6 +155,32 @@ func (s *Server) setLang(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: langCookie, Value: lang, Path: "/", MaxAge: 365 * 24 * 3600,
 		HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
+	http.Redirect(w, r, safeNext(r.URL.Query().Get("next")), http.StatusSeeOther)
+}
+
+const themeCookie = "wafpanel_theme"
+
+// themeOf is the reader's colour theme; empty follows the system setting.
+func themeOf(r *http.Request) string {
+	if c, err := r.Cookie(themeCookie); err == nil && (c.Value == "light" || c.Value == "dark") {
+		return c.Value
+	}
+	return ""
+}
+
+func (s *Server) setTheme(w http.ResponseWriter, r *http.Request) {
+	theme := r.PathValue("theme")
+	switch theme {
+	case "light", "dark":
+		http.SetCookie(w, &http.Cookie{Name: themeCookie, Value: theme, Path: "/", MaxAge: 365 * 24 * 3600,
+			HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
+	case "system":
+		http.SetCookie(w, &http.Cookie{Name: themeCookie, Path: "/", MaxAge: -1,
+			HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
+	default:
+		http.NotFound(w, r)
+		return
+	}
 	http.Redirect(w, r, safeNext(r.URL.Query().Get("next")), http.StatusSeeOther)
 }
 
