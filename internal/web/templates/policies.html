@@ -8,7 +8,7 @@
 
 <section class="card">
   <div class="cardhead">
-    <h2>{{t "%d rules" (len $d.Rows)}}</h2>
+    <h2>{{t "%d rules" $d.Total}}</h2>
     <div class="badges">
       <span class="badge">{{t "%d enabled" $d.Enabled}}</span>
       <span class="badge bad">✕ {{t "%d deny" $d.Deny}}</span>
@@ -16,13 +16,20 @@
       {{if .IsAdmin}}<a class="btn primary" href="/policies/new?instance={{$c.ID}}">+ {{t "Add rule"}}</a>{{end}}
     </div>
   </div>
-  <p class="muted small">{{t "SafeLine checks the rules from top to bottom and applies the first one that matches. An allow rule lets the request skip every other check, so keep allow rules narrow. Conditions in one box must all hold; any of the boxes is enough."}}</p>
+  <p class="muted small">{{t "SafeLine keeps a separate order for allow rules and for deny rules and checks each list from the top. Conditions in one box must all hold; any of the boxes is enough."}}</p>
+</section>
+
+{{range $l := $d.Lists}}{{if or $l.Rows (ge $l.Action 0)}}
+<section class="card">
+  <div class="cardhead"><h2>{{t $l.Title}}</h2>{{if ge $l.Action 0}}<span class="badge">{{len $l.Rows}}</span>{{end}}</div>
+  <p class="muted small">{{t $l.Hint}}</p>
+  {{$ordering := and $.IsAdmin (ge $l.Action 0) (gt (len $l.Rows) 1)}}
   <div class="scroll">
-  <table class="policies">
-    <thead><tr><th>#</th><th>{{t "Rule"}}</th><th>{{t "Action"}}</th><th>{{t "Conditions"}}</th><th>{{t "Hits"}}</th><th>{{t "Author"}}</th>{{if .IsAdmin}}<th></th>{{end}}</tr></thead>
+  <table class="policies" {{if $ordering}}data-order-form="order-{{$l.Action}}"{{end}}>
+    <thead><tr><th>{{if ge $l.Action 0}}{{t "Order"}}{{end}}</th><th>{{t "Rule"}}</th><th>{{t "Action"}}</th><th>{{t "Conditions"}}</th><th>{{t "Hits"}}</th><th>{{t "Author"}}</th>{{if $.IsAdmin}}<th></th>{{end}}</tr></thead>
     <tbody>
-    {{range $d.Rows}}{{$p := .}}<tr class="{{if not .IsEnabled}}off{{end}}">
-      <td class="muted">{{.Pos}}{{if .Tie}} <span class="badge warn" title="{{t "Another rule has the same position in SafeLine, so which of them is checked first is not defined. Move one of them to the top or the bottom."}}">=</span>{{end}}</td>
+    {{range $l.Rows}}{{$p := .}}<tr class="{{if not .IsEnabled}}off{{end}}">
+      <td class="nowrap">{{if .Builtin}}<span class="muted">—</span>{{else if $ordering}}<span class="orderctl"><input type="number" min="1" max="{{len $l.Rows}}" name="o{{.ID}}" value="{{.Pos}}" form="order-{{$l.Action}}" aria-label="{{t "Position of %s" .Name}}"><button type="button" class="btn sm up" aria-label="{{t "Move up"}}">↑</button><button type="button" class="btn sm down" aria-label="{{t "Move down"}}">↓</button></span>{{else}}<span class="muted">{{.Pos}}</span>{{end}}{{if .Tie}} <span class="badge warn" title="{{t "Another rule has the same position in SafeLine, so which of them is checked first is not defined. Apply the order to renumber the list."}}">=</span>{{end}}</td>
       <td><b>{{.Name}}</b>
         {{if .Builtin}}<br><small class="muted">{{t "built-in"}}</small>{{end}}
         {{if .Managed}}<br><small class="muted"><a href="/waf?instance={{$c.ID}}#block">{{t "panel blocklist"}}</a></small>{{end}}
@@ -57,5 +64,14 @@
     </tbody>
   </table>
   </div>
+  {{if $ordering}}
+  <form method="post" action="/policies/{{$c.ID}}/order" id="order-{{$l.Action}}" class="orderform">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="action" value="{{$l.Action}}">
+    <span class="muted small pending" hidden>{{t "The order was changed on this page and is not applied yet."}}</span>
+    <label class="grow">{{t "Reason for the new order (goes to the audit log)"}}<input name="reason" required></label>
+    <div class="actions"><button class="btn primary">{{t "Apply order"}}</button></div>
+  </form>
+  {{end}}
 </section>
+{{end}}{{end}}
 {{end}}

@@ -88,3 +88,17 @@ func (c *Client) UpdatePolicy(ctx context.Context, id int, s PolicySpec) error {
 func (c *Client) DeletePolicy(ctx context.Context, id int) error {
 	return c.send(ctx, http.MethodDelete, "/api/open/policy", map[string]any{"id": id}, nil)
 }
+
+// PolicyOrder is the position of a custom rule within its list. SafeLine
+// keeps one order for allow rules and another for deny rules, 1-based;
+// built-in rules have none.
+type PolicyOrder struct {
+	ID    int `json:"id"`
+	Order int `json:"order"`
+}
+
+// SetPolicyOrders renumbers rules in one call, as the console's "Apply
+// changes" does.
+func (c *Client) SetPolicyOrders(ctx context.Context, orders []PolicyOrder) error {
+	return c.send(ctx, http.MethodPut, "/api/open/policy/orders", map[string]any{"orders": orders}, nil)
+}

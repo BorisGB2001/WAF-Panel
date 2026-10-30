@@ -3,7 +3,8 @@
 # boris.gb 2026-10-30 16:22 - 0.6.1: site name goes to comment (SafeLine owns title), row menu no longer clipped
 # boris.gb 2026-10-30 16:38 - 0.7.0: Allow & Deny rules editor
 # boris.gb 2026-10-30 16:42 - 0.7.1: header names in rule conditions, rules sharing a position are marked
-VERSION ?= 0.7.1
+# boris.gb 2026-10-30 16:54 - 0.8.0: allow and deny lists with their own order, reordering
+VERSION ?= 0.8.0
 LDFLAGS = -s -w -X main.version=$(VERSION)
 
 .PHONY: build linux test

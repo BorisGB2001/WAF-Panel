@@ -26,10 +26,12 @@ func newPolicyFake() *policyFake {
 	return &policyFake{next: 20, policies: []map[string]any{
 		{"id": 1.0, "name": "Malicious IP", "action": 1.0, "is_enabled": true, "builtin": true,
 			"pattern": []any{[]any{map[string]any{"k": "src_ip", "op": "in", "v": []any{"1"}, "sub_k": ""}}}},
-		{"id": 8.0, "name": "Office", "action": 0.0, "is_enabled": true, "log": true, "req_count": 1234.0, "creator": "admin",
+		{"id": 8.0, "name": "Office", "action": 0.0, "order": 1.0, "is_enabled": true, "log": true, "req_count": 1234.0, "creator": "admin",
 			"pattern": []any{[]any{map[string]any{"k": "src_ip", "op": "cidr", "v": []any{"198.51.100.0/24"}, "sub_k": ""}}}},
-		{"id": 9.0, "name": "Geo", "action": 1.0, "is_enabled": false,
+		{"id": 9.0, "name": "Geo", "action": 1.0, "order": 1.0, "is_enabled": false,
 			"pattern": []any{[]any{map[string]any{"k": "src_ip", "op": "geo_eq", "v": []any{"CN"}, "sub_k": ""}}}},
+		{"id": 10.0, "name": "Scrapers", "action": 1.0, "order": 1.0, "is_enabled": true,
+			"pattern": []any{[]any{map[string]any{"k": "uri", "op": "prefix", "v": []any{"/export"}, "sub_k": ""}}}},
 	}}
 }
 
@@ -74,6 +76,12 @@ func (f *policyFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "PUT /api/open/policy/switch":
 		f.policies[f.find(body["id"].(float64))]["is_enabled"] = body["is_enabled"]
 		ok(nil)
+	case "PUT /api/open/policy/orders":
+		for _, o := range body["orders"].([]any) {
+			o := o.(map[string]any)
+			f.policies[f.find(o["id"].(float64))]["order"] = o["order"]
+		}
+		ok(nil)
 	case "GET /api/open/ipgroup":
 		ok(map[string]any{"total": 2, "nodes": []safeline.IPGroup{{ID: 1, Comment: "Malicious IPs", Builtin: true}, {ID: 5, Comment: "Scanners"}}})
 	case "GET /api/open/site":
@@ -97,8 +105,10 @@ func TestPolicies(t *testing.T) {
 	if strings.Contains(page, "/policies/prod/1/edit") || strings.Contains(page, "/policies/prod/9/edit") || !strings.Contains(page, "/policies/prod/8/edit") {
 		t.Fatal("only rules the editor can represent get an Edit link")
 	}
+	// Allow and deny keep separate orders: Office (allow, 1) is no tie with
+	// the deny rules, while Geo and Scrapers (deny, 1) are.
 	if strings.Count(page, "Another rule has the same position") != 2 {
-		t.Error("Office and Geo share order 0 and must both be marked")
+		t.Error("Geo and Scrapers share deny order 1 and must both be marked")
 	}
 	if len(fake.calls) != 0 {
 		t.Fatalf("viewing wrote: %v", fake.calls)
@@ -219,6 +229,61 @@ func TestPolicies(t *testing.T) {
 		if !strings.Contains(page, a) {
 			t.Errorf("audit lacks %s", a)
 		}
+	}
+}
+
+func TestPolicyOrder(t *testing.T) {
+	fake := newPolicyFake()
+	fake.policies = append(fake.policies, map[string]any{"id": 11.0, "name": "Bots", "action": 1.0, "order": 2.0, "is_enabled": true,
+		"pattern": []any{[]any{map[string]any{"k": "method", "op": "eq", "v": []any{"TRACE"}, "sub_k": ""}}}})
+	ts, s, _ := newTestServerWith(t, fake)
+	c := browser(ts)
+	pw, _ := os.ReadFile(filepath.Join(s.Cfg.Web.DataDir, "initial-admin-password"))
+	login(t, ts, c, "admin", strings.TrimSpace(string(pw)))
+	_, page := get(t, ts, c, "/policies")
+	csrf := csrfRe.FindStringSubmatch(page)[1]
+	post := func(v url.Values) {
+		v.Set("csrf", csrf)
+		v.Set("action", "1")
+		resp, err := c.PostForm(ts.URL+"/policies/prod/order", v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body(t, resp)
+	}
+	orders := func() map[string]float64 {
+		m := map[string]float64{}
+		for _, p := range fake.policies {
+			if o, ok := p["order"].(float64); ok {
+				m[p["name"].(string)] = o
+			}
+		}
+		return m
+	}
+
+	post(url.Values{"o11": {"1"}})
+	if len(fake.calls) != 0 {
+		t.Fatal("reordered without a reason")
+	}
+	// Bots moves onto position 1 and goes before the rules there; the tie
+	// between Geo and Scrapers is resolved in their listed order; the allow
+	// list is not touched.
+	post(url.Values{"o9": {"1"}, "o10": {"2"}, "o11": {"1"}, "reason": {"bots first"}})
+	if got := orders(); got["Bots"] != 1 || got["Geo"] != 2 || got["Scrapers"] != 3 || got["Office"] != 1 {
+		t.Fatalf("orders %v", got)
+	}
+	if n := len(fake.bodies[0]["orders"].([]any)); n != 3 {
+		t.Fatalf("sent %d orders, want the deny list only", n)
+	}
+	// Nothing to do once the list is numbered 1..n.
+	post(url.Values{"o11": {"1"}, "o9": {"2"}, "o10": {"3"}, "reason": {"again"}})
+	if len(fake.calls) != 1 {
+		t.Fatalf("unchanged order sent again: %v", fake.calls)
+	}
+	// Moving down past the end lands at the bottom.
+	post(url.Values{"o11": {"9"}, "reason": {"bots last"}})
+	if got := orders(); got["Geo"] != 1 || got["Scrapers"] != 2 || got["Bots"] != 3 {
+		t.Fatalf("orders %v", got)
 	}
 }
 

@@ -240,4 +240,32 @@
     form.querySelectorAll("[name=action]").forEach(function (r) { r.addEventListener("change", syncAction); });
     syncAction();
   }
+
+  // Allow & Deny: ↑/↓ move rows within a list and renumber it; the new
+  // order is sent with the list's "Apply order" form.
+  document.querySelectorAll("table[data-order-form]").forEach(function (table) {
+    var form = document.getElementById(table.dataset.orderForm);
+    var note = form && form.querySelector(".pending");
+    var body = table.tBodies[0];
+    var renumber = function () {
+      Array.prototype.forEach.call(body.rows, function (tr, i) {
+        var input = tr.querySelector(".orderctl input");
+        if (input) input.value = i + 1;
+      });
+      if (note) note.hidden = false;
+    };
+    body.addEventListener("click", function (e) {
+      var btn = e.target.closest(".orderctl button");
+      if (!btn) return;
+      var tr = btn.closest("tr");
+      if (btn.classList.contains("up") && tr.previousElementSibling) tr.after(tr.previousElementSibling);
+      else if (btn.classList.contains("down") && tr.nextElementSibling) tr.before(tr.nextElementSibling);
+      else return;
+      renumber();
+      btn.focus();
+    });
+    body.addEventListener("input", function (e) {
+      if (e.target.closest(".orderctl") && note) note.hidden = false;
+    });
+  });
 })();

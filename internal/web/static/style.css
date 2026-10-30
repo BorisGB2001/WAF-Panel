@@ -349,3 +349,10 @@ table.policies td.num { font-variant-numeric: tabular-nums; text-align: right; }
   .condrow textarea { grid-column: 1 / -1; }
 }
 .actionpick label[hidden], .condrow textarea[hidden] { display: none; }
+.orderctl { display: inline-flex; align-items: center; gap: 2px; }
+.orderctl input { width: 48px; padding: 3px 4px; text-align: center; font-variant-numeric: tabular-nums; }
+.orderctl .btn.sm { padding: 2px 7px; }
+.card form.orderform { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 12px; }
+.orderform .grow { flex: 1; min-width: 240px; }
+.orderform .pending { flex-basis: 100%; color: var(--warn); }
+.orderform .pending[hidden] { display: none; }

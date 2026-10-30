@@ -170,6 +170,7 @@ func (s *Server) Handler() http.Handler {
 	admin("GET /policies/new", s.policyNew)
 	admin("POST /policies", s.policySave)
 	admin("GET /policies/{instance}/{id}/edit", s.policyEdit)
+	admin("POST /policies/{instance}/order", s.policyOrder)
 	admin("POST /policies/{instance}/{id}", s.policySave)
 	admin("POST /policies/{instance}/{id}/enabled", s.policyEnabled)
 	admin("POST /policies/{instance}/{id}/delete", s.policyDelete)

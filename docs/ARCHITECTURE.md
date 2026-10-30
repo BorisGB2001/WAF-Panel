@@ -36,7 +36,7 @@ Sessions are HMAC-signed cookies that carry the user's password version, so chan
 | Statistics | `GET /api/stat/advance/{access,attack,error_status_code,status_code,location,client,domain,page}`, `GET /api/stat/advance/trend/{access,intercept}`, `GET /api/stat/qps` |
 | Sites | `GET/POST/PUT/DELETE /api/open/site`, `GET /api/open/site/{id}`, `PUT /api/open/site/mode`, `PUT /api/open/site/enabled` |
 | Certificates | `GET /api/open/cert`, `POST /api/open/cert`, `DELETE /api/open/cert/{id}` (the panel never reads a key back) |
-| Allow & Deny | `GET/POST/PUT/DELETE /api/open/policy`, `PUT /api/open/policy/switch` |
+| Allow & Deny | `GET/POST/PUT/DELETE /api/open/policy`, `PUT /api/open/policy/switch`, `PUT /api/open/policy/orders` |
 | Blocklist | `GET/POST/PUT /api/open/ipgroup`, `GET /api/open/ipgroup/detail`, `POST /api/open/ipgroup/append`, `GET/POST /api/open/policy`, `PUT /api/open/policy/switch` |
 | Health | `GET /api/open/health` |
 

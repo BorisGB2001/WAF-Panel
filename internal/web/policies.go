@@ -128,7 +128,7 @@ func (s *Server) policyRows(ctx context.Context, c *safeline.Client) ([]policyRo
 	}
 	rows := make([]policyRow, len(ps))
 	for i, p := range ps {
-		rows[i] = policyRow{Policy: p, Pos: i + 1, Managed: p.ID == managed && managed != 0}
+		rows[i] = policyRow{Policy: p, Managed: p.ID == managed && managed != 0}
 		for _, and := range p.Pattern {
 			var g []condView
 			for _, x := range and {
@@ -137,16 +137,45 @@ func (s *Server) policyRows(ctx context.Context, c *safeline.Client) ([]policyRo
 			rows[i].Groups = append(rows[i].Groups, g)
 		}
 	}
-	orders := map[int]int{}
-	for _, x := range rows {
-		if !x.Builtin {
-			orders[x.Order]++
+	// Built-in rules first, then each list by its own order; the API's own
+	// sequence breaks ties.
+	slices.SortStableFunc(rows, func(a, b policyRow) int {
+		switch {
+		case a.Builtin != b.Builtin:
+			if a.Builtin {
+				return -1
+			}
+			return 1
+		case a.Builtin:
+			return 0
+		case a.Action != b.Action:
+			return a.Action - b.Action
 		}
+		return a.Order - b.Order
+	})
+	type list struct{ action, order int }
+	seen := map[list]int{}
+	pos := map[int]int{}
+	for i, x := range rows {
+		if x.Builtin {
+			continue
+		}
+		pos[x.Action]++
+		rows[i].Pos = pos[x.Action]
+		seen[list{x.Action, x.Order}]++
 	}
-	for i := range rows {
-		rows[i].Tie = !rows[i].Builtin && orders[rows[i].Order] > 1
+	for i, x := range rows {
+		rows[i].Tie = !x.Builtin && seen[list{x.Action, x.Order}] > 1
 	}
 	return rows, n, nil
+}
+
+// policyList is one section of the page: built-in rules, or the allow or
+// deny list with its own order.
+type policyList struct {
+	Title, Hint string
+	Action      int // -1 for built-in rules
+	Rows        []policyRow
 }
 
 func (s *Server) policiesPage(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
@@ -158,8 +187,21 @@ func (s *Server) policiesPage(w http.ResponseWriter, r *http.Request, rc *reqCtx
 	if err != nil {
 		p.Error = "SafeLine: " + err.Error()
 	}
+	lists := []policyList{
+		{Title: "Allow list", Hint: "Matching requests skip every other check of the WAF, so keep these rules narrow.", Action: 0},
+		{Title: "Deny list", Hint: "Matching requests are blocked, or only recorded for rules in record-only mode.", Action: 1},
+		{Title: "Built-in rules", Hint: "Rules shipped with SafeLine: they can be switched on and off, not edited.", Action: -1},
+	}
 	var enabled, allow, deny int
 	for _, x := range rows {
+		switch {
+		case x.Builtin:
+			lists[2].Rows = append(lists[2].Rows, x)
+		case x.Action == 0:
+			lists[0].Rows = append(lists[0].Rows, x)
+		default:
+			lists[1].Rows = append(lists[1].Rows, x)
+		}
 		if x.IsEnabled {
 			enabled++
 			if x.Action == 0 {
@@ -169,9 +211,83 @@ func (s *Server) policiesPage(w http.ResponseWriter, r *http.Request, rc *reqCtx
 			}
 		}
 	}
-	p.Data = map[string]any{"Instance": c, "Instances": s.Clients, "Rows": rows,
+	p.Data = map[string]any{"Instance": c, "Instances": s.Clients, "Lists": lists, "Total": len(rows),
 		"Enabled": enabled, "Allow": allow, "Deny": deny}
 	s.render(w, r, rc, "policies.html", p)
+}
+
+// policyOrder applies a new order to one list. Positions come as o<ID>
+// fields; a rule moved onto a taken position goes before the rule there.
+func (s *Server) policyOrder(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
+	c := s.instanceFrom(r)
+	back := "/policies?instance=" + url.QueryEscape(c.ID)
+	action := 0
+	if r.FormValue("action") == "1" {
+		action = 1
+	}
+	reason := strings.TrimSpace(r.FormValue("reason"))
+	if reason == "" {
+		flashRedirect(w, r, back, "", tr(r, "Give a reason — it goes to the audit log"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	rows, _, err := s.policyRows(ctx, c)
+	if err != nil {
+		flashRedirect(w, r, back, "", "SafeLine: "+err.Error())
+		return
+	}
+	type item struct {
+		row          policyRow
+		want         int
+		moved, stale bool
+	}
+	var items []item
+	for _, x := range rows {
+		if x.Builtin || x.Action != action {
+			continue
+		}
+		it := item{row: x, want: x.Pos, stale: x.Tie || x.Order != x.Pos}
+		if v, err := strconv.Atoi(strings.TrimSpace(r.FormValue("o" + strconv.Itoa(x.ID)))); err == nil && v != x.Pos {
+			it.want, it.moved = max(v, 1), true
+		}
+		items = append(items, it)
+	}
+	changed := false
+	for _, it := range items {
+		changed = changed || it.moved || it.stale
+	}
+	if !changed {
+		flashRedirect(w, r, back, tr(r, "The order has not changed"), "")
+		return
+	}
+	slices.SortStableFunc(items, func(a, b item) int {
+		if a.want != b.want {
+			return a.want - b.want
+		}
+		if a.moved != b.moved {
+			if a.moved {
+				return -1
+			}
+			return 1
+		}
+		return a.row.Pos - b.row.Pos
+	})
+	orders := make([]safeline.PolicyOrder, len(items))
+	names := make([]string, len(items))
+	for i, it := range items {
+		orders[i] = safeline.PolicyOrder{ID: it.row.ID, Order: i + 1}
+		names[i] = fmt.Sprintf("%d. %s", i+1, it.row.Name)
+	}
+	list := map[int]string{0: "allow", 1: "deny"}[action]
+	detail := fmt.Sprintf("%s %s list: %s — %s", c.ID, list, reason, strings.Join(names, ", "))
+	if err := c.SetPolicyOrders(ctx, orders); err != nil {
+		s.audit.Log(rc.User.Name, clientIP(r), "policy.order.failed", detail+" — "+err.Error())
+		flashRedirect(w, r, back, "", tr(r, "SafeLine rejected the change: %s", errText(r, err)))
+		return
+	}
+	s.audit.Log(rc.User.Name, clientIP(r), "policy.order", detail)
+	flashRedirect(w, r, back, tr(r, "New order applied"), "")
 }
 
 // policyForm is the editor as typed, kept to re-render it after an error.
