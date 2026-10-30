@@ -1,0 +1,33 @@
+{{define "content"}}
+{{$d := .Data}}{{$r := $d.R}}
+<p><a href="/attacks?instance={{$d.Instance.ID}}">← {{t "Attack log"}}</a></p>
+{{if $r.EventID}}
+<div class="card verdict">
+  <div class="stamp {{if $r.Denied}}deny{{else}}pass{{end}}">{{if $r.Denied}}{{t "Deny"}}{{else}}{{t "Pass"}}{{end}}</div>
+  <div class="urlline"><span class="badge bad">{{atype $r.AttackType}}</span><span>{{$d.Scheme}}://{{$r.Host}}{{$r.URLPath}}</span></div>
+  <dl class="kv">
+    <dt>{{t "Attacker IP"}}</dt><dd class="mono">{{$r.SrcIP}}{{if $d.SrcPort}}:{{$d.SrcPort}}{{end}} {{if ne $r.SocketIP $r.SrcIP}}({{t "socket %s" $r.SocketIP}}){{end}} {{$r.Country}} {{$r.City}}
+      · <a href="/attacks?instance={{$d.Instance.ID}}&amp;period=30d&amp;ip={{$r.SrcIP}}">{{t "all attacks from this IP"}}</a>
+      {{if .IsAdmin}}· <a class="bad" href="/waf?instance={{$d.Instance.ID}}&amp;block={{$r.SrcIP}}#block">{{t "block this IP"}}</a>{{end}}</dd>
+    <dt>{{t "Payload"}}</dt><dd>{{if $d.Location}}<span class="badge info">{{$d.Location}}</span> {{end}}<code class="hl">{{if $d.Payload}}{{$d.Payload}}{{else}}—{{end}}</code></dd>
+    <dt>{{t "Module / rule"}}</dt><dd class="mono">{{$d.Module}} {{$r.RuleID}}</dd>
+    <dt>{{t "Risk"}}</dt><dd>{{template "risk" $r.RiskLevel}}</dd>
+    <dt>{{t "Time"}}</dt><dd>{{dt $r.Time}}</dd>
+    <dt>WAF</dt><dd>{{$d.Instance.Name}} → {{$d.DstIP}}:{{$r.DstPort}} · {{t "backend answered %s" (or $d.Status "—")}}</dd>
+    <dt>JA4</dt><dd class="mono">{{$r.JA4}}</dd>
+    <dt>ID</dt><dd class="mono">{{$r.EventID}}</dd>
+  </dl>
+</div>
+<div class="card">
+  <div class="cardhead">
+    <div class="tabs"><button type="button" class="on" data-tab="req">{{t "Request"}}</button><button type="button" data-tab="rsp">{{t "Response"}}</button></div>
+    <button type="button" class="btn" data-curl="raw-req" data-scheme="{{$d.Scheme}}" data-copied="{{t "Copied"}}">{{t "Copy as cURL"}}</button>
+  </div>
+  <pre class="http" data-pane="req">{{$d.ReqHTML}}</pre>
+  <pre class="http" data-pane="rsp" hidden>{{$d.RspHTML}}</pre>
+  <pre id="raw-req" hidden>{{$d.ReqRaw}}</pre>
+</div>
+{{end}}
+{{end}}
+
+{{define "risk"}}{{if ge . 3}}<span class="badge bad">▲ {{t "high"}}</span>{{else if eq . 2}}<span class="badge warn">■ {{t "medium"}}</span>{{else}}<span class="badge info">▼ {{t "low"}}</span>{{end}}{{end}}

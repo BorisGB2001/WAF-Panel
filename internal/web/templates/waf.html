@@ -1,0 +1,115 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := $d.Instance}}
+{{if gt (len $d.Instances) 1}}
+<form class="card filters" method="get" action="/waf">
+  <label>WAF<select name="instance" class="autosubmit">{{range $d.Instances}}<option value="{{.ID}}" {{if eq .ID $c.ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+</form>
+{{end}}
+
+{{if $d.DryRun}}
+<div class="note warn">◐ {{t "%d site(s) in Monitoring mode. SafeLine records attacks on them but does not block. IP blocks from the blocklist may not apply in this mode either — for reliable blocking the site must be in Defense mode." $d.DryRun}}</div>
+{{end}}
+
+<section class="card">
+  <h2>{{t "Sites and protection modes"}}</h2>
+  {{if $d.Sites}}
+  <div class="scroll">
+  <table>
+    <thead><tr><th>{{t "Site"}}</th><th>Upstream</th><th>{{t "Mode"}}</th>{{if .IsAdmin}}<th>{{t "Change mode"}}</th>{{end}}</tr></thead>
+    <tbody>
+    {{range $d.Sites}}{{$site := .}}<tr>
+      <td><b>{{join .ServerNames ", "}}</b><br><small class="muted">{{.Title}} {{.Comment}}{{if not .Enabled}} · <em class="bad">{{t "disabled"}}</em>{{end}}</small></td>
+      <td class="mono">{{join .Upstreams ", "}}</td>
+      <td>{{template "modebadge" .Mode}}</td>
+      {{if $.IsAdmin}}<td>
+        <details>
+          <summary>{{t "Change…"}}</summary>
+          <form method="post" action="/waf/{{$c.ID}}/sites/{{.ID}}/mode" class="stack">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            {{range $d.Modes}}{{if ne .Mode $site.Mode}}
+            <label class="radio"><input type="radio" name="mode" value="{{.Mode}}" required> <b>{{t .Label}}</b> — {{t .Hint}}</label>
+            {{end}}{{end}}
+            <label>{{t "Reason (goes to the audit log)"}}<input name="reason" required placeholder="{{t "e.g. enabling blocking after reviewing false positives"}}"></label>
+            <label>{{t "To confirm, type"}} <span class="mono">{{if .ServerNames}}{{index .ServerNames 0}}{{else}}{{.Title}}{{end}}</span><input name="confirm" required autocomplete="off"></label>
+            <button class="btn danger">{{t "Change mode"}}</button>
+          </form>
+        </details>
+      </td>{{end}}
+    </tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}<p class="muted">{{t "No sites, or they are unavailable."}}</p>{{end}}
+</section>
+
+<section class="card" id="block">
+  <div class="cardhead">
+    <h2>{{t "IP blocklist"}}</h2>
+    {{with $d.Block}}{{if .PolicyID}}
+      <span class="badge {{if .PolicyEnabled}}good{{else}}bad{{end}}">{{if .PolicyEnabled}}✓ {{t "rule #%d enabled" .PolicyID}}{{else}}✕ {{t "rule #%d disabled" .PolicyID}}{{end}}</span>
+    {{else}}<span class="badge">{{t "created on the first block"}}</span>{{end}}{{end}}
+  </div>
+  <p class="muted small">{{t "The panel keeps the SafeLine IP group “WAF Panel blocklist” and a deny rule for it. Expired blocks are removed automatically. Addresses added to the group in the SafeLine console are marked “from console”."}}</p>
+  {{with $d.Block}}{{if .Entries}}
+  <table>
+    <thead><tr><th>{{t "IP / subnet"}}</th><th>{{t "Reason"}}</th><th>{{t "By"}}</th><th>{{t "When"}}</th><th>{{t "Until"}}</th>{{if $.IsAdmin}}<th></th>{{end}}</tr></thead>
+    <tbody>
+    {{range .Entries}}<tr>
+      <td class="mono"><a href="/attacks?instance={{$c.ID}}&amp;period=30d&amp;ip={{.IP}}">{{.IP}}</a></td>
+      <td>{{if .External}}<span class="muted">{{t "from console"}}</span>{{else}}{{.Reason}}{{end}}</td>
+      <td>{{.By}}</td>
+      <td class="nowrap">{{if not .At.IsZero}}{{dt .At}}{{end}}</td>
+      <td class="nowrap">{{if .External}}—{{else if .Expires.IsZero}}{{t "permanent"}}{{else}}{{dt .Expires}}{{end}}</td>
+      {{if $.IsAdmin}}<td><form method="post" action="/waf/{{$c.ID}}/unblock" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}"><button class="btn sm">{{t "Unblock"}}</button></form></td>{{end}}
+    </tr>{{end}}
+    </tbody>
+  </table>
+  {{else}}<p class="muted">{{t "No blocked addresses."}}</p>{{end}}{{end}}
+
+  {{if .IsAdmin}}
+  <form method="post" action="/waf/{{$c.ID}}/block" class="blockform">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>{{t "IP or subnet"}}<input name="ip" required value="{{$d.Prefill}}" placeholder="203.0.113.5 / 203.0.113.0/24"></label>
+    <label>{{t "Duration"}}<select name="ttl">{{range $d.TTLs}}<option value="{{.Key}}" {{if eq .Key "24h"}}selected{{end}}>{{t .Label}}</option>{{end}}</select></label>
+    <label class="grow">{{t "Reason"}}<input name="reason" required placeholder="{{t "scanner, password brute force, …"}}"></label>
+    <div class="actions"><button class="btn danger">{{t "Block"}}</button></div>
+  </form>
+  <p class="muted small">{{t "You cannot block your own address (%s), the WAF itself, loopback, or subnets wider than /16 (IPv6: /48)." $d.MyIP}}</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>{{t "SafeLine rules"}}</h2>
+  <p class="muted small">{{t "Read only. Rules are edited in the SafeLine console."}}</p>
+  {{if $d.Policies}}
+  <div class="scroll">
+  <table>
+    <thead><tr><th>{{t "Rule"}}</th><th>{{t "Action"}}</th><th>{{t "Conditions"}}</th><th>{{t "State"}}</th><th>{{t "Author"}}</th></tr></thead>
+    <tbody>
+    {{range $d.Policies}}<tr class="{{if not .IsEnabled}}off{{end}}">
+      <td>{{.Name}}{{if .Builtin}} <small class="muted">{{t "built-in"}}</small>{{end}}</td>
+      <td>{{if eq .Action 1}}<span class="badge bad">✕ {{t "deny"}}</span>{{else}}<span class="badge good">✓ {{t "allow"}}</span>{{end}}</td>
+      <td class="mono small">{{.Conditions}}</td>
+      <td>{{if .IsEnabled}}{{t "enabled"}}{{else}}{{t "disabled"}}{{end}}</td>
+      <td>{{.Creator}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>{{t "IP groups"}}</h2>
+  {{if $d.Groups}}
+  <table>
+    <thead><tr><th>#</th><th>{{t "Group"}}</th><th>{{t "Addresses"}}</th><th></th></tr></thead>
+    <tbody>
+    {{range $d.Groups}}<tr><td>{{.ID}}</td><td>{{.Comment}}</td><td>{{.Total}}</td><td>{{if .Builtin}}<small class="muted">{{t "built-in"}}</small>{{end}}</td></tr>{{end}}
+    </tbody>
+  </table>
+  {{end}}
+</section>
+{{end}}
+
+{{define "modebadge"}}{{if eq . 0}}<span class="badge good">● {{t "Defense"}}</span>{{else if eq . 2}}<span class="badge warn">◐ {{t "Monitoring"}}</span>{{else}}<span class="badge bad">✕ {{t "Offline"}}</span>{{end}}{{end}}

@@ -1,0 +1,75 @@
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$t := $v.T}}
+<div class="statbar">
+  {{if gt (len $d.Instances) 1}}
+  <form method="get" action="/stats"><select name="instance" class="autosubmit">{{range $d.Instances}}<option value="{{.ID}}" {{if eq .ID $v.Instance.ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></form>
+  {{end}}
+  <span class="muted small">{{t "Last 24 hours · all applications · updated %s" (dt $v.At)}}</span>
+</div>
+
+<div class="statgrid">
+  <div class="tiles four">
+    <div class="tile"><span>{{t "Requests"}}</span><b title="{{$t.Access.Requests}}">{{num $t.Access.Requests}}</b>{{$v.ReqSpark}}</div>
+    <div class="tile"><span>{{t "Page views (PV)"}}</span><b title="{{$t.Access.PV}}">{{num $t.Access.PV}}</b></div>
+    <div class="tile"><span>{{t "Visitors (UV)"}}</span><b title="{{$t.Access.Sessions}}">{{num $t.Access.Sessions}}</b></div>
+    <div class="tile"><span>{{t "Unique IPs"}}</span><b>{{$t.Access.IPs}}</b></div>
+  </div>
+  <div class="tiles two">
+    <div class="tile"><span>{{t "Blocked"}}</span><b>{{num $v.Blocked}}</b></div>
+    <div class="tile"><span>{{t "Attacking IPs"}}</span><b>{{$t.AttackIPs}}</b></div>
+  </div>
+  <div class="tiles two">
+    <div class="tile"><span>{{t "4xx from the application"}}</span><b>{{num $t.Upstream.E4xx}}</b><small>{{t "rate %s" $v.Rate4xx}}</small></div>
+    <div class="tile"><span>{{t "4xx from the WAF"}}</span><b>{{num $t.WAF.E4xx}}</b><small>{{t "block rate %s" $v.RateWAF}}</small></div>
+  </div>
+  <div class="tiles two">
+    <div class="tile"><span>{{t "5xx from the application"}}</span><b class="{{if $t.Upstream.E5xx}}warn{{end}}" title="{{$t.Upstream.E5xx}}">{{num $t.Upstream.E5xx}}</b><small>{{t "rate %s" $v.Rate5xx}}</small></div>
+    <div class="tile"><span>{{t "QPS now"}}</span><b id="qps-now">{{$v.QPSNow}}</b><small>{{t "requests per second"}}</small></div>
+  </div>
+</div>
+
+<div class="grid2">
+  <section class="card">
+    <div class="cardhead"><h2>{{t "Queries per second"}}</h2><span class="muted small">{{t "last ~3 minutes, refreshed every 5 s"}}</span></div>
+    <div class="bars qps" id="qps" data-instance="{{$v.Instance.ID}}" data-unit="{{t "req/s"}}">
+      {{range $v.QPS}}<div class="bar" data-tip="{{.Label}} — {{.Value}} {{t "req/s"}}"><i style="--h:{{if lt .Pct 2}}2{{else}}{{.Pct}}{{end}}%"></i></div>{{end}}
+    </div>
+  </section>
+  <section class="card">
+    <div class="cardhead"><h2>{{t "What was blocked"}}</h2></div>
+    <div class="donutbox">{{$v.BlkDonut}}
+      <ul class="legend">{{range $v.BlkSlices}}<li><i class="s{{.Slot}}"></i><span>{{t .Label}}</span><b>{{.Value}}</b><small>{{.Pct}}%</small></li>{{else}}<li class="muted">{{t "Nothing was blocked in 24 hours."}}</li>{{end}}</ul>
+    </div>
+  </section>
+</div>
+
+<div class="grid2">
+  <section class="card">
+    <div class="cardhead"><h2>{{t "Requests per hour"}}</h2><span class="muted small">{{t "peak"}} <b>{{num $v.ReqPeak}}</b>/{{t "h"}}</span></div>
+    {{$v.ReqChart}}
+  </section>
+  <section class="card">
+    <div class="cardhead"><h2>{{t "Blocks per hour"}}</h2><span class="muted small">{{t "peak"}} <b>{{num $v.BlkPeak}}</b>/{{t "h"}}</span></div>
+    {{$v.BlkChart}}
+  </section>
+</div>
+
+<div class="grid2">
+  <section class="card"><h2>{{t "Requests by location"}}</h2>{{template "counts" $t.Geo}}</section>
+  <section class="card"><h2>{{t "Blocks by location"}}</h2>{{template "counts" $t.GeoBlock}}</section>
+</div>
+
+<div class="grid4">
+  <section class="card"><h2>{{t "Operating systems"}}</h2>{{template "counts" $t.OS}}</section>
+  <section class="card"><h2>{{t "Browsers"}}</h2>{{template "counts" $t.Browsers}}</section>
+  <section class="card"><h2>{{t "Response codes"}}</h2>{{template "counts" $t.Status}}</section>
+  <section class="card"><h2>{{t "Referrers"}}</h2>{{template "counts" $t.Referers}}</section>
+</div>
+<section class="card"><h2>{{t "Popular pages"}}</h2>{{template "counts" $t.Pages}}</section>
+<p class="muted small">{{t "SafeLine CE leaves the empty blocks blank: locations, clients, response codes, referrers and pages are collected only by paid editions or for applications with advanced statistics enabled. SafeLine CE keeps statistics for the last 24 hours only."}}</p>
+{{end}}
+
+{{define "counts"}}
+{{if .}}<ol class="top">{{$max := (index . 0).Count}}{{range .}}<li><span class="k" title="{{.Key}}">{{if .Key}}{{.Key}}{{else}}—{{end}}</span><span class="v">{{num .Count}}</span><i style="--w:{{pct64 .Count $max}}%"></i></li>{{end}}</ol>
+{{else}}<p class="muted small">{{t "No data"}}</p>{{end}}
+{{end}}

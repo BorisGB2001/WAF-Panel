@@ -1,0 +1,47 @@
+{{define "layout"}}<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · WAF Panel</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+</head>
+<body{{if not .User.Name}} class="bare"{{end}}>
+{{if .User.Name}}
+<aside class="side">
+  <a class="brand" href="/"><span class="logo">◆</span> WAF Panel</a>
+  <nav>
+    <a href="/" class="{{if eq .Active "dash"}}on{{end}}">{{t "Overview"}}</a>
+    <a href="/stats" class="{{if eq .Active "stats"}}on{{end}}">{{t "Statistics"}}</a>
+    <a href="/apps" class="{{if eq .Active "apps"}}on{{end}}">{{t "Applications"}}</a>
+    <a href="/attacks" class="{{if eq .Active "attacks"}}on{{end}}">{{t "Attack log"}}</a>
+    <a href="/waf" class="{{if eq .Active "waf"}}on{{end}}">{{t "WAF control"}}</a>
+    <a href="/alerts" class="{{if eq .Active "alerts"}}on{{end}}">{{t "Alerts"}}</a>
+    <a href="/rules" class="{{if eq .Active "rules"}}on{{end}}">{{t "Alert rules"}}</a>
+    <a href="/channels" class="{{if eq .Active "channels"}}on{{end}}">{{t "Channels & SIEM"}}</a>
+    {{if .IsAdmin}}
+    <span class="navsep">{{t "Administration"}}</span>
+    <a href="/users" class="{{if eq .Active "users"}}on{{end}}">{{t "Users"}}</a>
+    <a href="/audit" class="{{if eq .Active "audit"}}on{{end}}">{{t "Audit"}}</a>
+    {{end}}
+  </nav>
+  <div class="me">
+    <a href="/account" class="{{if eq .Active "account"}}on{{end}}">{{.User.Name}} <small>{{.User.Role}}</small></a>
+    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link">{{t "Sign out"}}</button></form>
+    {{template "langswitch" .}}
+    <small class="ver">{{.Version}}</small>
+  </div>
+</aside>
+{{end}}
+<main>
+  {{if .User.Name}}<h1>{{.Title}}</h1>{{end}}
+  {{if .Flash}}<div class="note ok" role="status">{{.Flash}}</div>{{end}}
+  {{if .Error}}<div class="note err" role="alert">{{.Error}}</div>{{end}}
+  {{template "content" .}}
+</main>
+<script src="/static/charts.js"></script>
+</body>
+</html>{{end}}
+
+{{define "langswitch"}}<span class="langs"><a href="/lang/en?next=/" class="{{if eq .Lang "en"}}on{{end}}">EN</a> · <a href="/lang/ru?next=/" class="{{if eq .Lang "ru"}}on{{end}}">RU</a></span>{{end}}

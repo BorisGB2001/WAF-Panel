@@ -1,0 +1,30 @@
+# boris.gb 2026-10-30 15:06 - systemd unit of wafpanel (alerts, SIEM, web panel on 12443); replaces wafpanel-alerts.service, runs as an unprivileged user
+[Unit]
+Description=WAF Panel for SafeLine: alerts, SIEM forwarding and web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=wafpanel
+Group=wafpanel
+ExecStart=/usr/local/bin/wafpanel -config /etc/wafpanel/wafpanel.yaml
+Restart=always
+RestartSec=5
+StateDirectory=wafpanel
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadOnlyPaths=/etc/wafpanel
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

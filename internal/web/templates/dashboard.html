@@ -1,0 +1,91 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="tiles">
+  <div class="tile"><span>{{t "Alerts in 24 h"}}</span><b>{{$d.Alerts24h}}</b><small>{{t "active rules: %d" $d.Rules}}</small></div>
+  <div class="tile"><span>{{t "Alerts delivered"}}</span><b>{{$d.AlertsSent}}</b><small>{{if $d.AlertsFail}}<em class="bad">{{t "failed: %d" $d.AlertsFail}}</em>{{else}}{{t "no failures"}}{{end}}</small></div>
+  <div class="tile"><span>{{t "Events sent to SIEM"}}</span><b>{{$d.SIEMSent}}</b><small>{{if $d.SIEMDropped}}<em class="bad">{{t "dropped: %d" $d.SIEMDropped}}</em>{{else}}{{t "nothing dropped"}}{{end}}</small></div>
+  <div class="tile"><span>{{t "Service started"}}</span><b class="sm">{{ago $d.Started}}</b><small>{{dt $d.Started}}</small></div>
+</div>
+
+{{range $d.Instances}}
+<section class="card">
+  <div class="cardhead">
+    <h2>{{.Name}} <small class="muted">{{.ID}}</small></h2>
+    <div class="badges">
+      {{if .HealthErr}}<span class="badge bad" title="{{.HealthErr}}">✕ {{t "SafeLine unreachable"}}</span>{{else}}<span class="badge good">✓ SafeLine</span>{{end}}
+      {{if .Status.LastError}}<span class="badge bad" title="{{.Status.LastError}}">✕ {{t "poll error"}}</span>{{else}}<span class="badge good">✓ {{t "polled %s" (ago .Status.LastOK)}}</span>{{end}}
+    </div>
+  </div>
+
+  {{with .Agg}}
+  <div class="tiles inner">
+    <div class="tile"><span>{{t "Attacks in 24 h"}}</span><b title="{{.Total}}">{{num .Total}}</b></div>
+    <div class="tile"><span>{{t "Blocked"}}</span><b>{{.Denied}}</b></div>
+    <div class="tile"><span>{{t "Passed"}}</span><b class="{{if .Passed}}warn{{end}}">{{.Passed}}</b><small>{{if .Passed}}{{t "site in monitoring mode or the rule does not block"}}{{end}}</small></div>
+  </div>
+  {{if .Truncated}}<p class="muted small">{{t "Charts use the latest %d of %d events." .Fetched .Total}}</p>{{end}}
+  <div class="grid2 wide-left">
+    <div>
+      <div class="cardhead"><h3>{{t "Attacks per hour"}}</h3><div class="chartlegend"><span class="s1">{{t "attacks"}}</span><span class="s2">{{t "blocked"}}</span></div></div>
+      {{.Chart (t "attacks") (t "blocked")}}
+    </div>
+    <div>
+      <h3>{{t "Attack types"}}</h3>
+      <div class="donutbox">{{.TypesDonut (t "attacks")}}
+        <ul class="legend">{{range .TypeSlices}}<li><i class="s{{.Slot}}"></i><span title="{{.Label}}">{{atypeName .Label}}</span><b>{{.Value}}</b><small>{{.Pct}}%</small></li>{{else}}<li class="muted">{{t "No data"}}</li>{{end}}</ul>
+      </div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div><h3>{{t "Top sources"}}</h3>{{template "toplist" .IPs}}</div>
+    <div><h3>{{t "Top sites"}}</h3>{{template "toplist" .Hosts}}</div>
+  </div>
+  {{else}}<div class="note err">{{t "Statistics unavailable"}}: {{.AggErr}}</div>{{end}}
+
+  <h3>{{t "Protected sites"}}</h3>
+  {{if .SitesErr}}<div class="note err">{{.SitesErr}}</div>{{else}}
+  <table>
+    <thead><tr><th>{{t "Site"}}</th><th>{{t "Domains"}}</th><th>Upstream</th><th>{{t "Mode"}}</th><th>{{t "State"}}</th></tr></thead>
+    <tbody>
+    {{range .Sites}}<tr>
+      <td>{{if .Title}}{{.Title}}{{else}}#{{.ID}}{{end}} <small class="muted">{{.Comment}}</small></td>
+      <td>{{join .ServerNames ", "}}</td>
+      <td class="mono">{{join .Upstreams ", "}}</td>
+      <td>{{template "modebadge" .Mode}}</td>
+      <td>{{if .Enabled}}{{t "enabled"}}{{else}}<em class="bad">{{t "disabled"}}</em>{{end}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+  {{end}}
+  <p class="muted small">{{t "Updated %s. Collector: %d events since start, %d poll errors." (ago .At) .Status.Events .Status.PollErrors}}</p>
+</section>
+{{end}}
+
+<section class="card">
+  <div class="cardhead"><h2>{{t "Latest alerts"}}</h2><a href="/alerts">{{t "All alerts"}} →</a></div>
+  {{template "alerttable" $d.Recent}}
+</section>
+{{end}}
+
+{{define "toplist"}}
+{{if .}}<ol class="top">{{$max := (index . 0).Count}}{{range .}}<li><span class="k" title="{{.Key}}">{{if .Key}}{{.Key}}{{else}}—{{end}}</span><span class="v">{{.Count}}</span><i style="--w:{{pct .Count $max}}%"></i></li>{{end}}</ol>
+{{else}}<p class="muted">{{t "No data"}}</p>{{end}}
+{{end}}
+
+{{define "modebadge"}}{{if eq . 0}}<span class="badge good">● {{t "Defense"}}</span>{{else if eq . 2}}<span class="badge warn">◐ {{t "Monitoring"}}</span>{{else}}<span class="badge bad">✕ {{t "Offline"}}</span>{{end}}{{end}}
+
+{{define "alerttable"}}
+{{if .}}
+<table>
+  <thead><tr><th>{{t "Time"}}</th><th>{{t "Rule"}}</th><th>{{t "Alert"}}</th><th>{{t "Delivery"}}</th></tr></thead>
+  <tbody>
+  {{range .}}<tr>
+    <td class="nowrap">{{dt .Time}}</td>
+    <td><span class="badge {{sevclass .Severity}}">{{.Severity}}</span> {{.Rule}}</td>
+    <td><details><summary>{{.Title}}</summary><pre>{{.Text}}</pre></details></td>
+    <td>{{range $ch, $st := .Delivery}}<span class="badge {{deliveryclass $st}}" title="{{$st}}">{{if eq $st "ok"}}✓{{else if eq $st "queued"}}…{{else}}✕{{end}} {{$ch}}</span> {{end}}</td>
+  </tr>{{end}}
+  </tbody>
+</table>
+{{else}}<p class="muted">{{t "No alerts yet."}}</p>{{end}}
+{{end}}

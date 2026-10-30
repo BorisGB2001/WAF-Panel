@@ -1,0 +1,31 @@
+{{define "content"}}
+{{$d := .Data}}{{$f := $d.F}}{{$c := $d.Instance}}
+<p><a href="/apps?instance={{$c.ID}}">← {{t "Applications"}}</a></p>
+<form class="card appform" method="post" action="{{if $d.ID}}/apps/{{$c.ID}}/{{$d.ID}}{{else}}/apps?instance={{$c.ID}}{{end}}">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <input type="hidden" name="instance" value="{{$c.ID}}">
+  <div class="grid2">
+    <label>{{t "Name"}}<input name="title" value="{{$f.Title}}" placeholder="Shop"></label>
+    <label>{{t "Comment"}}<input name="comment" value="{{$f.Comment}}" placeholder="frontend"></label>
+  </div>
+  <div class="grid3">
+    <label>{{t "Domains — one per line"}}<textarea name="names" rows="5" class="code" required placeholder="shop.example.com">{{$f.Names}}</textarea></label>
+    <label>{{t "Ports — “80” or “443 ssl”"}}<textarea name="ports" rows="5" class="code" required>{{$f.Ports}}</textarea></label>
+    <label>{{t "Upstreams — one per line"}}<textarea name="upstreams" rows="5" class="code" required placeholder="https://10.0.0.12:443">{{$f.Upstreams}}</textarea></label>
+  </div>
+  <div class="grid3">
+    <label>{{t "Certificate (for ssl ports)"}}<select name="cert_id"><option value="0">—</option>{{range $d.Certs}}<option value="{{.ID}}" {{if eq .ID $f.CertID}}selected{{end}}>{{join .Domains ", "}} · {{t "until"}} {{dt .Expires}}</option>{{end}}</select></label>
+    <label>{{t "Load balancing"}}<select name="balance">{{range $d.Balances}}<option value="{{.ID}}" {{if eq .ID $f.Balance}}selected{{end}}>{{t .Label}}</option>{{end}}</select></label>
+    <label class="radio"><input type="checkbox" name="health_check" {{if $f.HealthCheck}}checked{{end}}> {{t "Check upstream health"}}</label>
+  </div>
+  {{if not $d.ID}}
+  <fieldset class="modes"><legend>{{t "Mode of the new site"}}</legend>
+    <label class="radio"><input type="radio" name="mode" value="2" {{if eq $f.Mode 2}}checked{{end}}> <b>{{t "Monitoring"}}</b> — {{t "attacks are recorded, nothing is blocked (recommended to start)"}}</label>
+    <label class="radio"><input type="radio" name="mode" value="0" {{if eq $f.Mode 0}}checked{{end}}> <b>{{t "Defense"}}</b> — {{t "attacks are blocked right away"}}</label>
+  </fieldset>
+  {{end}}
+  <label>{{t "Reason for the change (goes to the audit log)"}}<input name="reason" required value="{{$f.Reason}}"></label>
+  <div class="actions"><button class="btn primary">{{if $d.ID}}{{t "Save and apply"}}{{else}}{{t "Create application"}}{{end}}</button><a class="btn" href="/apps?instance={{$c.ID}}">{{t "Cancel"}}</a></div>
+  <p class="muted small">{{t "The mode of an existing site is changed in “Protection modes”. Other settings (error pages, Anti-Bot, limits) are left untouched. Ports 22, 9188, 9443, 12443 and 65443 are taken and cannot be used by sites."}}</p>
+</form>
+{{end}}

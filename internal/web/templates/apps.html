@@ -1,0 +1,67 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := $d.Instance}}
+{{range $d.Certs}}{{if lt .DaysLeft 30}}
+<div class="note {{if lt .DaysLeft 7}}err{{else}}warn{{end}}">⚠ {{if .Expired}}{{t "Certificate %s has expired (%s). Used by: %s." (join .Domains ", ") (dt .Expires) (or (join .RelatedSites ", ") "—")}}{{else}}{{t "Certificate %s expires in %d days (%s). Used by: %s." (join .Domains ", ") .DaysLeft (dt .Expires) (or (join .RelatedSites ", ") "—")}}{{end}}</div>
+{{end}}{{end}}
+
+<section class="card">
+  <div class="cardhead">
+    <h2>{{t "%d applications" (len $d.Rows)}}</h2>
+    <div class="badges">
+      <a class="btn" href="/certs?instance={{$c.ID}}">{{t "Certificates"}}</a>
+      <a class="btn" href="/waf?instance={{$c.ID}}">{{t "Protection modes"}}</a>
+      {{if .IsAdmin}}<a class="btn primary" href="/apps/new?instance={{$c.ID}}">+ {{t "Add application"}}</a>{{end}}
+    </div>
+  </div>
+  <div class="scroll">
+  <table class="apps">
+    <thead><tr><th>{{t "Application"}}</th><th>{{t "Ports"}}</th><th>Upstream</th><th>{{t "Mode"}}</th><th>{{t "Protections"}}</th><th>{{t "Today"}}</th>{{if .IsAdmin}}<th></th>{{end}}</tr></thead>
+    <tbody>
+    {{range $d.Rows}}{{$s := .Site}}<tr class="{{if not $s.Enabled}}off{{end}}">
+      <td class="name"><b>{{if $s.Title}}{{$s.Title}}{{else}}{{index $s.ServerNames 0}}{{end}}</b><span class="muted small mono">{{join $s.ServerNames ", "}}</span>{{if $s.Comment}} <small class="muted">· {{$s.Comment}}</small>{{end}}
+        {{with .Cert}}<br><small class="muted">🔒 {{.Issuer}} · {{t "until"}} {{dt .Expires}}{{if lt .DaysLeft 30}} <span class="badge warn">{{t "%d d" .DaysLeft}}</span>{{end}}</small>{{end}}</td>
+      <td class="nowrap">{{range $s.Ports}}{{template "port" .}}{{end}}</td>
+      <td>{{range $up, $st := .Health}}<div class="nowrap"><span class="mono small">{{$up}}</span> {{if eq $st "ok"}}<span class="badge good" title="{{t "reachable"}}">✓</span>{{else}}<span class="badge bad" title="{{$st}}">✕</span>{{end}}</div>{{else}}<span class="mono small">{{join $s.Upstreams ", "}}</span>{{end}}</td>
+      <td>{{template "modebadge" $s.Mode}}{{if not $s.Enabled}}<br><span class="badge bad">✕ {{t "disabled"}}</span>{{end}}</td>
+      <td>{{if .Detail}}<div class="chips">
+        <span class="chip {{if .Detail.Bool "semantics"}}on{{end}}">{{t "Semantic"}}</span>
+        <span class="chip {{if .Detail.Bool "acl_enabled"}}on{{end}}">{{t "Rate limit"}}</span>
+        <span class="chip {{if .Detail.Bool "challenge_is_enabled"}}on{{end}}">Anti-Bot</span>
+        <span class="chip {{if gt (.Detail.Int "auth_defense_id") 0}}on{{end}}">Auth</span>
+        <span class="chip {{if .Detail.Bool "chaos_is_enabled"}}on{{end}}">{{t "Dynamic"}}</span>
+      </div>{{end}}</td>
+      <td>{{if .Detail}}<div class="today"><span>{{t "Requests"}}</span><b>{{num (.Detail.Int64 "req_value")}}</b><span>{{t "Blocked"}}</span><b>{{num (.Detail.Int64 "denied_value")}}</b></div>{{end}}</td>
+      {{if $.IsAdmin}}<td class="nowrap">
+        <a class="btn sm" href="/apps/{{$c.ID}}/{{$s.ID}}/edit">{{t "Edit"}}</a>
+        <details class="inline">
+          <summary class="btn sm">•••</summary>
+          <div class="menu">
+            <form method="post" action="/apps/{{$c.ID}}/{{$s.ID}}/enabled" class="stack">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="enabled" value="{{if $s.Enabled}}0{{else}}1{{end}}">
+              <b>{{if $s.Enabled}}{{t "Disable"}}{{else}}{{t "Enable"}}{{end}}</b>
+              {{if $s.Enabled}}<p class="muted small">{{t "A disabled site is no longer served by the WAF: its requests do not get through."}}</p>{{end}}
+              <label>{{t "Reason"}}<input name="reason" required></label>
+              <label>{{t "Type"}} <span class="mono">{{index $s.ServerNames 0}}</span><input name="confirm" required autocomplete="off"></label>
+              <button class="btn danger">{{if $s.Enabled}}{{t "Disable"}}{{else}}{{t "Enable"}}{{end}}</button>
+            </form>
+            <form method="post" action="/apps/{{$c.ID}}/{{$s.ID}}/delete" class="stack">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <b>{{t "Delete"}}</b>
+              <p class="muted small">{{t "The site is removed from the WAF with all its settings. This cannot be undone."}}</p>
+              <label>{{t "Reason"}}<input name="reason" required></label>
+              <label>{{t "Type"}} <span class="mono">{{index $s.ServerNames 0}}</span><input name="confirm" required autocomplete="off"></label>
+              <button class="btn danger">{{t "Delete permanently"}}</button>
+            </form>
+          </div>
+        </details>
+      </td>{{end}}
+    </tr>{{if .Err}}<tr><td colspan="7"><div class="note err">{{.Err}}</div></td></tr>{{end}}
+    {{else}}<tr><td colspan="7" class="muted">{{t "No applications."}}</td></tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{end}}
+
+{{define "port"}}{{if hasSuffix . "_ssl"}}<span class="port ssl" title="TLS">🔒{{trimSuffix . "_ssl"}}</span>{{else}}<span class="port">{{.}}</span>{{end}}{{end}}
+{{define "modebadge"}}{{if eq . 0}}<span class="badge good">● {{t "Defense"}}</span>{{else if eq . 2}}<span class="badge warn">◐ {{t "Monitoring"}}</span>{{else}}<span class="badge bad">✕ {{t "Offline"}}</span>{{end}}{{end}}
