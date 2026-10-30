@@ -4,7 +4,8 @@
 # boris.gb 2026-10-30 16:38 - 0.7.0: Allow & Deny rules editor
 # boris.gb 2026-10-30 16:42 - 0.7.1: header names in rule conditions, rules sharing a position are marked
 # boris.gb 2026-10-30 16:54 - 0.8.0: allow and deny lists with their own order, reordering
-VERSION ?= 0.8.0
+# boris.gb 2026-10-30 18:15 - 0.9.0: traffic analytics from tengine's logs
+VERSION ?= 0.9.0
 LDFLAGS = -s -w -X main.version=$(VERSION)
 
 .PHONY: build linux test

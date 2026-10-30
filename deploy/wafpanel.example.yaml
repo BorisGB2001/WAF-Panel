@@ -35,6 +35,13 @@ instances:
     page_size: 100 # SafeLine accepts at most 100
     max_pages: 20
     backfill: false # do not send existing events on the first start
+    # Traffic analytics when SafeLine runs on this host: locations, clients,
+    # response codes, endpoints, referrers and upstream errors from tengine's
+    # logs, kept for 90 days. Turn on the access log of each application in
+    # SafeLine to include it.
+    logs:
+      access_dir: /data/safeline/logs/nginx/safeline
+      error_log: /data/safeline/logs/nginx/error.log
 
 channels:
   - name: tg-soc
@@ -114,3 +121,10 @@ siem:
     framing: newline # newline | octet (RFC 6587, tcp/tls)
     # only_denied: true
     # ca_file: secrets/siem-ca.pem # for network: tls
+
+# boris.gb 2026-10-30 18:15 - traffic analytics settings
+analytics:
+  # Copied by deploy/install.sh from SafeLine's detector image.
+  geoip_db: /var/lib/wafpanel/GeoLite2-City.mmdb
+  retention: 2160h # 90 days
+  backfill: true   # read the rotated logs still on disk on the first start

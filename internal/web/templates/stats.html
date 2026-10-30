@@ -54,11 +54,12 @@
   </section>
 </div>
 
+{{$tr := $d.Tr}}
+{{if $tr.Enabled}}{{template "traffic" $tr}}{{else}}
 <div class="grid2">
   <section class="card"><h2>{{t "Requests by location"}}</h2>{{template "counts" $t.Geo}}</section>
   <section class="card"><h2>{{t "Blocks by location"}}</h2>{{template "counts" $t.GeoBlock}}</section>
 </div>
-
 <div class="grid4">
   <section class="card"><h2>{{t "Operating systems"}}</h2>{{template "counts" $t.OS}}</section>
   <section class="card"><h2>{{t "Browsers"}}</h2>{{template "counts" $t.Browsers}}</section>
@@ -66,10 +67,101 @@
   <section class="card"><h2>{{t "Referrers"}}</h2>{{template "counts" $t.Referers}}</section>
 </div>
 <section class="card"><h2>{{t "Popular pages"}}</h2>{{template "counts" $t.Pages}}</section>
-<p class="muted small">{{t "SafeLine CE leaves the empty blocks blank: locations, clients, response codes, referrers and pages are collected only by paid editions or for applications with advanced statistics enabled. SafeLine CE keeps statistics for the last 24 hours only."}}</p>
+<p class="muted small">{{t "SafeLine CE leaves the empty blocks blank: locations, clients, response codes, referrers and pages are collected only by paid editions or for applications with advanced statistics enabled. SafeLine CE keeps statistics for the last 24 hours only."}} {{t "The panel can fill them from tengine's logs when it runs on the SafeLine host: set logs.access_dir for the instance."}}</p>
+{{end}}
 {{end}}
 
 {{define "counts"}}
 {{if .}}<ol class="top">{{$max := (index . 0).Count}}{{range .}}<li><span class="k" title="{{.Key}}">{{if .Key}}{{.Key}}{{else}}—{{end}}</span><span class="v">{{num .Count}}</span><i style="--w:{{pct64 .Count $max}}%"></i></li>{{end}}</ol>
 {{else}}<p class="muted small">{{t "No data"}}</p>{{end}}
 {{end}}
+
+{{define "rows"}}{{if .}}<ol class="top">{{range .}}<li><span class="k" title="{{.Key}}{{if .Hint}} — {{.Hint}}{{end}}">{{if .Flag}}<span class="flag">{{.Flag}}</span> {{end}}{{if eq .Key "(other)"}}{{t "Other"}}{{else}}{{.Label}}{{end}}{{if .Hint}} <small class="muted">{{.Hint}}</small>{{end}}</span><span class="v">{{num .N}} <small class="muted">{{.Pct}}%</small></span><i style="--w:{{.W}}%"></i></li>{{end}}</ol>{{else}}<p class="muted small">{{t "No data"}}</p>{{end}}{{end}}
+
+{{define "traffic"}}{{$q := .Q}}
+<div class="sectionhead" id="traffic">
+  <h2>{{t "Traffic from logs"}}</h2>
+  <form method="get" action="/stats#traffic" class="inlinefilters">
+    <div class="seg">{{range .Periods}}<button name="period" value="{{.Key}}" class="{{if eq .Key $.Period}}on{{end}}">{{t .Label}}</button>{{end}}</div>
+    <select name="site" class="autosubmit"><option value="">{{t "All applications"}}</option>{{range .Sites}}<option value="{{.ID}}" {{if eq (printf "%d" .ID) $.Site}}selected{{end}}>{{if .ServerNames}}{{index .ServerNames 0}}{{else}}{{.Title}}{{end}}</option>{{end}}</select>
+    <input type="hidden" name="period" value="{{.Period}}">
+  </form>
+</div>
+{{if .HiddenIPs}}<div class="note warn">▲ {{t "%d%% of requests come from %s, a private address: the sites are behind another proxy that does not pass the client's address, and SafeLine takes the source IP from the connection. Locations, unique visitors, rate limits, attack sources and IP blocks then all see the proxy. Make the proxy send X-Forwarded-For and set SafeLine to take the source IP from that header." .TopIPShare .TopIP}}</div>{{end}}
+{{if .NoLog}}<div class="note">ⓘ {{t "No access log for: %s. Turn on the access log of these applications in SafeLine to include them." (join .NoLog ", ")}}</div>{{end}}
+{{if not .Status.Geo}}<div class="note">ⓘ {{t "No geo database: countries stay unknown. Set analytics.geoip_db."}}</div>{{end}}
+{{if .Status.LastError}}<div class="note err">{{t "Reading the logs: %s" .Status.LastError}}</div>{{end}}
+
+<div class="tiles eight">
+  <div class="tile"><span>{{t "Requests"}}</span><b title="{{$q.N}}">{{num $q.N}}</b></div>
+  <div class="tile"><span>{{t "Traffic sent"}}</span><b>{{.Bytes}}</b></div>
+  <div class="tile"><span>{{t "Unique IPs"}}</span><b>{{num .Uniq}}</b></div>
+  <div class="tile"><span>{{t "Visitors"}}</span><b>{{num .Visitors}}</b><small>{{t "address + browser"}}</small></div>
+  <div class="tile"><span>{{t "4xx"}}</span><b>{{num $q.E4}}</b><small>{{.Rate4}}</small></div>
+  <div class="tile"><span>{{t "5xx"}}</span><b class="{{if $q.E5}}warn{{end}}">{{num $q.E5}}</b><small>{{.Rate5}}</small></div>
+  <div class="tile"><span>{{t "Upstream errors"}}</span><b class="{{if $q.UpErrN}}warn{{end}}">{{num $q.UpErrN}}</b><small>{{t "timeouts, refused, TLS"}}</small></div>
+  <div class="tile"><span>{{t "Bots"}}</span><b>{{num .BotN}}</b><small>{{.BotRate}}</small></div>
+</div>
+
+<section class="card">
+  <div class="cardhead"><h2>{{t "Requests and errors"}}</h2>
+    <ul class="legend inline"><li><i class="s1"></i>{{t "requests"}}</li><li><i class="s4"></i>4xx</li><li><i class="s2"></i>5xx</li></ul></div>
+  {{.Chart}}
+</section>
+
+<div class="grid2">
+  <section class="card"><h2>{{t "Countries"}}</h2>{{template "rows" .Countries}}</section>
+  <section class="card"><h2>{{t "Cities"}}</h2>{{template "rows" .Cities}}</section>
+</div>
+
+<div class="grid2">
+  <section class="card"><h2>{{t "Operating systems"}}</h2>
+    <div class="donutbox">{{.OSDonut}}<ul class="legend">{{range .OSSlices}}<li><i class="s{{.Slot}}"></i><span>{{t .Label}}</span><b>{{num .Value}}</b><small>{{.Pct}}%</small></li>{{else}}<li class="muted">{{t "No data"}}</li>{{end}}</ul></div>
+  </section>
+  <section class="card"><h2>{{t "Browsers and apps"}}</h2>
+    <div class="donutbox">{{.ClientDonut}}<ul class="legend">{{range .ClientSlices}}<li><i class="s{{.Slot}}"></i><span>{{t .Label}}</span><b>{{num .Value}}</b><small>{{.Pct}}%</small></li>{{else}}<li class="muted">{{t "No data"}}</li>{{end}}</ul></div>
+    <details><summary class="small">{{t "By version"}}</summary>{{template "rows" .Clients}}</details>
+  </section>
+</div>
+
+<div class="grid4">
+  <section class="card"><h2>{{t "Response codes"}}</h2>{{template "rows" .Statuses}}</section>
+  <section class="card"><h2>{{t "Methods"}}</h2>{{template "rows" .Methods}}</section>
+  <section class="card"><h2>{{t "Referrers"}}</h2>{{template "rows" .Referrers}}</section>
+  <section class="card"><h2>{{t "Bots and tools"}}</h2>{{template "rows" .Bots}}</section>
+</div>
+
+<section class="card">
+  <div class="cardhead"><h2>{{t "Endpoints"}}</h2><span class="muted small">{{t "ids in paths are folded into :id"}}</span></div>
+  {{template "endpoints" .Paths}}
+</section>
+<section class="card">
+  <div class="cardhead"><h2>{{t "Endpoints with errors"}}</h2><span class="muted small">{{t "sorted by 4xx + 5xx"}}</span></div>
+  {{template "endpoints" .ErrPaths}}
+</section>
+
+<div class="grid2">
+  <section class="card"><h2>{{t "Top addresses"}}</h2>
+    {{if .IPs}}<div class="scroll"><table class="compact">
+      <thead><tr><th>IP</th><th>{{t "Location"}}</th><th class="num">{{t "Requests"}}</th><th class="num">4xx</th><th class="num">5xx</th><th></th></tr></thead>
+      <tbody>{{range .IPs}}<tr><td class="mono">{{.Key}}</td><td>{{if .Flag}}{{.Flag}} {{end}}{{.Label}}</td><td class="num">{{num .N}}</td><td class="num">{{num .E4}}</td><td class="num">{{num .E5}}</td><td class="nowrap"><a class="btn sm" href="/attacks?ip={{.Key}}&amp;period=30d">{{t "Attacks"}}</a></td></tr>{{end}}</tbody>
+    </table></div>{{else}}<p class="muted small">{{t "No data"}}</p>{{end}}
+  </section>
+  <section class="card"><h2>{{t "Hosts"}}</h2>{{template "rows" .Hosts}}</section>
+</div>
+
+<section class="card">
+  <div class="cardhead"><h2>{{t "Upstream errors"}}</h2><span class="muted small">{{t "from tengine's error log"}}</span></div>
+  {{.ErrChart}}
+  <div class="grid2">
+    <div><h3>{{t "By kind"}}</h3>{{template "rows" .UpKinds}}</div>
+    <div><h3>{{t "By upstream"}}</h3>{{template "rows" .Upstreams}}</div>
+  </div>
+</section>
+<p class="muted small">{{t "Read from tengine's logs on this host. Since the last restart: %d lines, %d not recognized. Unique counts are estimates (±2%%)." .Status.Lines .Status.Skipped}}</p>
+{{end}}
+
+{{define "endpoints"}}{{if .}}<div class="scroll"><table class="compact endpoints">
+  <thead><tr><th>{{t "Endpoint"}}</th><th class="num">{{t "Requests"}}</th><th>{{t "Share"}}</th><th class="num">4xx</th><th class="num">5xx</th><th class="num">{{t "Traffic"}}</th></tr></thead>
+  <tbody>{{range .}}<tr><td class="mono small">{{.Key}}</td><td class="num">{{num .N}}</td><td class="sharecell"><i style="--w:{{.W}}%"></i><small>{{.Pct}}%</small></td><td class="num {{if .E4}}warn{{end}}">{{.Rate4}}</td><td class="num {{if .E5}}bad{{end}}">{{.Rate5}}</td><td class="num">{{bytes .Bytes}}</td></tr>{{end}}</tbody>
+</table></div>{{else}}<p class="muted small">{{t "No data"}}</p>{{end}}{{end}}

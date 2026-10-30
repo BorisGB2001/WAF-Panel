@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"wafpanel/internal/analytics"
 
 	"wafpanel/internal/auth"
 	"wafpanel/internal/blocklist"
@@ -54,6 +55,8 @@ type Server struct {
 	Log      *slog.Logger
 	Version  string
 	RuleFile string
+	// Analytics collects traffic from the logs of instances on this host.
+	Analytics map[string]*analytics.Collector
 
 	users    *auth.Users
 	sessions *auth.Sessions

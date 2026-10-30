@@ -38,6 +38,30 @@ type Config struct {
 	Channels  []Channel  `yaml:"channels"`
 	Rules     []Rule     `yaml:"rules"`
 	SIEM      []SIEM     `yaml:"siem"`
+	Analytics Analytics  `yaml:"analytics"`
+}
+
+// Analytics builds traffic statistics from the logs of SafeLine instances
+// on this host (see Instance.Logs).
+type Analytics struct {
+	// GeoIPDB is a MaxMind-format City or Country database; without it
+	// only private and public addresses are told apart. The installer
+	// copies the GeoLite2-City.mmdb of SafeLine's detector image.
+	GeoIPDB string `yaml:"geoip_db"`
+	// Retention of daily statistics, 90 days by default.
+	Retention Duration `yaml:"retention"`
+	// Backfill reads the rotated logs still on disk on the first start.
+	Backfill *bool `yaml:"backfill"`
+}
+
+// Logs of a SafeLine installation on this host.
+type Logs struct {
+	// AccessDir holds tengine's accesslog_<site id>, e.g.
+	// /data/safeline/logs/nginx/safeline.
+	AccessDir string `yaml:"access_dir"`
+	// ErrorLog is tengine's error log, e.g.
+	// /data/safeline/logs/nginx/error.log.
+	ErrorLog string `yaml:"error_log"`
 }
 
 type HTTP struct {
@@ -85,6 +109,8 @@ type Instance struct {
 	// Backfill emits the events already present on the first start.
 	// Off by default so a new deployment does not flood the channels.
 	Backfill bool `yaml:"backfill"`
+	// Logs enables traffic analytics when SafeLine runs on this host.
+	Logs Logs `yaml:"logs"`
 
 	Token string `yaml:"-"`
 }
@@ -243,6 +269,18 @@ func (c *Config) finish(dir string) error {
 		c.Web.SessionTTL = Duration(12 * time.Hour)
 	}
 
+	c.Analytics.GeoIPDB = abs(c.Analytics.GeoIPDB)
+	if c.Analytics.Retention == 0 {
+		c.Analytics.Retention = Duration(90 * 24 * time.Hour)
+	}
+	if c.Analytics.Retention.D() < 48*time.Hour {
+		return fmt.Errorf("analytics: retention must be at least 48h")
+	}
+	if c.Analytics.Backfill == nil {
+		yes := true
+		c.Analytics.Backfill = &yes
+	}
+
 	if len(c.Instances) == 0 {
 		return fmt.Errorf("no instances configured")
 	}
@@ -256,6 +294,7 @@ func (c *Config) finish(dir string) error {
 		if in.Name == "" {
 			in.Name = in.ID
 		}
+		in.Logs.AccessDir, in.Logs.ErrorLog = abs(in.Logs.AccessDir), abs(in.Logs.ErrorLog)
 		if !strings.HasPrefix(in.BaseURL, "https://") && !strings.HasPrefix(in.BaseURL, "http://127.0.0.1") && !strings.HasPrefix(in.BaseURL, "http://localhost") {
 			return fmt.Errorf("instance %s: base_url must be https (the API token travels in a header)", in.ID)
 		}

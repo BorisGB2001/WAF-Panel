@@ -12,11 +12,15 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
+	"wafpanel/internal/analytics"
 	"wafpanel/internal/auth"
 	"wafpanel/internal/collector"
 	"wafpanel/internal/config"
@@ -143,6 +147,27 @@ func run(cfgPath string, check bool, testChannel string, dryRun bool, log *slog.
 		go c.Run(ctx, events)
 	}
 
+	tracking := map[string]*analytics.Collector{}
+	var geo *analytics.Geo
+	if cfg.Analytics.GeoIPDB != "" {
+		if geo, err = analytics.OpenGeo(cfg.Analytics.GeoIPDB); err != nil {
+			log.Warn("analytics: no geo database, countries stay unknown", "err", err)
+		}
+	}
+	for i, in := range cfg.Instances {
+		if in.Logs.AccessDir == "" {
+			continue
+		}
+		a := &analytics.Collector{
+			AccessDir: in.Logs.AccessDir, ErrorLog: in.Logs.ErrorLog, Geo: geo, Log: log,
+			Store:    &analytics.Store{Dir: filepath.Join(cfg.Web.DataDir, "analytics", in.ID), Retention: cfg.Analytics.Retention.D()},
+			SiteOf:   siteResolver(ctx, clients[i]),
+			Backfill: *cfg.Analytics.Backfill,
+		}
+		tracking[in.ID] = a
+		go a.Run(ctx)
+	}
+
 	if cfg.HTTP.Listen != "" {
 		go serveHTTP(ctx, cfg.HTTP.Listen, st, 3*maxInterval+time.Minute, log)
 	}
@@ -150,7 +175,7 @@ func run(cfgPath string, check bool, testChannel string, dryRun bool, log *slog.
 	webErr := make(chan error, 1)
 	if cfg.Web.Listen != "" {
 		ws := &web.Server{Cfg: cfg, Clients: clients, Senders: senders, Stats: st, History: hist,
-			Rules: p, Log: log, Version: version, RuleFile: ruleFile}
+			Rules: p, Log: log, Version: version, RuleFile: ruleFile, Analytics: tracking}
 		if err := ws.Open(activeRules); err != nil {
 			return fmt.Errorf("web: %w", err)
 		}
@@ -170,6 +195,42 @@ func run(cfgPath string, check bool, testChannel string, dryRun bool, log *slog.
 	}
 	log.Info("stopping")
 	return nil
+}
+
+// siteResolver maps a server_name from tengine's error log to the id of
+// the SafeLine site, re-reading the sites every ten minutes.
+func siteResolver(ctx context.Context, c *safeline.Client) func(string) string {
+	var mu sync.Mutex
+	var names map[string]string
+	var at time.Time
+	return func(server string) string {
+		mu.Lock()
+		defer mu.Unlock()
+		if time.Since(at) > 10*time.Minute {
+			at = time.Now()
+			cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			sites, err := c.Sites(cctx)
+			cancel()
+			if err == nil {
+				names = map[string]string{}
+				for _, s := range sites {
+					for _, n := range s.ServerNames {
+						names[strings.ToLower(n)] = strconv.Itoa(s.ID)
+					}
+				}
+			}
+		}
+		server = strings.ToLower(server)
+		if id, ok := names[server]; ok {
+			return id
+		}
+		for n, id := range names {
+			if strings.HasPrefix(n, "*.") && strings.HasSuffix(server, n[1:]) {
+				return id
+			}
+		}
+		return ""
+	}
 }
 
 func runCheck(ctx context.Context, clients []*safeline.Client) error {

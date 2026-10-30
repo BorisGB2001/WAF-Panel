@@ -62,6 +62,7 @@ var funcs = template.FuncMap{
 	"hasSuffix":  strings.HasSuffix,
 	"trimSuffix": strings.TrimSuffix,
 	"num":        compact,
+	"bytes":      humanBytes,
 	"join":       func(s []string, sep string) string { return strings.Join(s, sep) },
 	"pct": func(a, b int) int {
 		if b == 0 {

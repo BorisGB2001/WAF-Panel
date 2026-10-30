@@ -129,7 +129,7 @@ func (s *Server) statsPage(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
 	if len(t.Errors) > 0 {
 		p.Error = tr(r, "SafeLine did not answer every request: %v", t.Errors)
 	}
-	p.Data = map[string]any{"V": v, "Instances": s.Clients}
+	p.Data = map[string]any{"V": v, "Instances": s.Clients, "Tr": s.traffic(ctx, r, c)}
 	s.render(w, r, rc, "stats.html", p)
 }
 

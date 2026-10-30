@@ -16,6 +16,12 @@ sudo sh deploy/install.sh                          # upgrade: binary and unit on
 
 The installer checks the new binary with the new config (`-check`) before switching over and keeps the previous config as `wafpanel.yaml.bak-<date>`.
 
+## Traffic analytics
+
+Set `logs.access_dir` and `logs.error_log` of the instance (see the example config). SafeLine writes an access log only for applications that have it turned on. The logs are world-readable, so the unprivileged service reads them without extra rights.
+
+If almost all requests come from one private address, the sites sit behind another proxy that does not pass the client's address, and SafeLine takes the source IP from the connection. Locations, unique visitors, rate limits, attack sources and IP blocks then all see that proxy, and blocking its address blocks everyone. Make the proxy send `X-Forwarded-For` and set SafeLine to take the source IP from it.
+
 ## TLS
 
 Without `tls_cert`/`tls_key` the panel creates a self-signed certificate in `data_dir/tls`. It can reuse the certificate SafeLine serves for your sites (`/data/safeline/resources/nginx/certs/cert_N.crt|key`); the file is re-read when it changes, so a renewal in SafeLine needs no restart. `plain_http` is allowed only on a loopback address.
@@ -35,6 +41,8 @@ When the console certificate is issued for a name but `base_url` uses an IP, set
 | `/var/lib/wafpanel/alerts-history.jsonl` | alert history |
 | `/var/lib/wafpanel/audit.log` | audit log |
 | `/var/lib/wafpanel/blocklist-<instance>.json` | who blocked an IP, why and until when |
+| `/var/lib/wafpanel/analytics/` | traffic statistics from the logs, a file per site and day |
+| `/var/lib/wafpanel/GeoLite2-City.mmdb` | geo database copied from SafeLine's detector image by the installer |
 
 ## Security
 
