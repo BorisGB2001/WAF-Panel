@@ -1,0 +1,59 @@
+{{define "content"}}
+{{$d := .Data}}{{$f := $d.F}}{{$c := $d.Instance}}
+<p><a href="/policies?instance={{$c.ID}}">← {{t "Allow & Deny"}}</a></p>
+<form class="card policyform" method="post" action="{{if $d.ID}}/policies/{{$c.ID}}/{{$d.ID}}{{else}}/policies?instance={{$c.ID}}{{end}}">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <input type="hidden" name="instance" value="{{$c.ID}}">
+  <div class="grid2">
+    <label>{{t "Name"}}<input name="name" value="{{$f.Name}}" required maxlength="128" placeholder="{{t "e.g. Block the admin area from outside"}}"></label>
+    <label>{{t "Position in the list"}}<select name="position">{{range $d.Positions}}{{if or $d.ID .Key}}<option value="{{.Key}}" {{if eq .Key $f.Position}}selected{{end}}>{{t .Label}}</option>{{end}}{{end}}</select></label>
+  </div>
+
+  <fieldset class="actionpick">
+    <legend>{{t "When a request matches"}}</legend>
+    <label class="radio"><input type="radio" name="action" value="1" {{if eq $f.Action 1}}checked{{end}}> <span class="badge bad">✕ {{t "deny"}}</span> {{t "the request is blocked"}}</label>
+    <label class="radio sub" data-for-action="1"><input type="checkbox" name="monitor" {{if $f.Monitor}}checked{{end}}> {{t "Record only, do not block (to try the rule first)"}}</label>
+    <label class="radio"><input type="radio" name="action" value="0" {{if eq $f.Action 0}}checked{{end}}> <span class="badge good">✓ {{t "allow"}}</span> {{t "the request skips every other check of the WAF"}}</label>
+    <label class="radio sub" data-for-action="0"><input type="checkbox" name="log" {{if $f.Log}}checked{{end}}> {{t "Write allowed requests to the log"}}</label>
+  </fieldset>
+
+  <div class="conds-edit" id="orgroups" data-next="{{len $f.Groups}}">
+    <p class="muted small">{{t "Conditions in one box must all hold; any of the boxes is enough. Several values of one condition (one per line) mean “any of them”."}}</p>
+    {{range $gi, $g := $f.Groups}}
+    <fieldset class="orgroup">
+      <legend><span class="or">{{t "or"}}</span></legend>
+      {{range $g}}{{$x := .}}
+      <div class="condrow">
+        <input type="hidden" name="g" value="{{$gi}}">
+        <select name="k" class="ck" aria-label="{{t "Target"}}">{{range $d.Keys}}<option value="{{.Key}}" data-name="{{.Keys}}" {{if eq .Key $x.K}}selected{{end}}>{{t .Label}}</option>{{end}}</select>
+        <input name="sub" class="csub" value="{{$x.Sub}}" placeholder="{{t "header or parameter name"}}" aria-label="{{t "header or parameter name"}}">
+        <select name="op" class="cop" aria-label="{{t "Operator"}}">{{range $d.Ops}}<option value="{{.Key}}" data-keys="{{.Keys}}" {{if eq .Key $x.Op}}selected{{end}}>{{t .Label}}</option>{{end}}</select>
+        <textarea name="v" rows="1" class="code cv" aria-label="{{t "Values, one per line"}}" placeholder="{{t "one value per line"}}">{{$x.Lines}}</textarea>
+        <button type="button" class="btn sm cdel" title="{{t "Remove the condition"}}" aria-label="{{t "Remove the condition"}}">✕</button>
+      </div>
+      {{end}}
+      <button type="button" class="btn sm addand">+ {{t "and"}}</button>
+    </fieldset>
+    {{end}}
+    <button type="button" class="btn sm addor">+ {{t "or another box"}}</button>
+  </div>
+
+  <details class="muted small">
+    <summary>{{t "What can be typed as values"}}</summary>
+    <ul>
+      <li>{{t "Source IP: an address (203.0.113.5), a subnet (203.0.113.0/24), a wildcard (203.0.113.*) or an IP group by name."}}
+        {{if $d.IPGroups}}{{t "IP groups:"}} {{range $i, $g := $d.IPGroups}}{{if $i}}, {{end}}<code>{{$g.Comment}}</code>{{end}}{{end}}</li>
+      <li>{{t "Application: a domain of the site."}} {{range $i, $s := $d.Sites}}{{if $i}}, {{end}}{{if $s.ServerNames}}<code>{{index $s.ServerNames 0}}</code>{{end}}{{end}}</li>
+      <li>{{t "Regex: Go/RE2 syntax is checked before saving."}}</li>
+    </ul>
+  </details>
+
+  <label class="radio"><input type="checkbox" name="enabled" {{if $f.Enabled}}checked{{end}}> {{t "Rule enabled"}}</label>
+  <label>{{t "Reason for the change (goes to the audit log)"}}<input name="reason" value="{{$f.Reason}}" required></label>
+  <div class="actions">
+    <button class="btn primary">{{if $d.ID}}{{t "Save and apply"}}{{else}}{{t "Create rule"}}{{end}}</button>
+    <a class="btn" href="/policies?instance={{$c.ID}}">{{t "Cancel"}}</a>
+  </div>
+  <p class="muted small">{{t "You cannot save a deny rule that blocks your own address (%s)." $d.MyIP}}</p>
+</form>
+{{end}}

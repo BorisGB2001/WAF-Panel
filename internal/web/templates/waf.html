@@ -79,24 +79,11 @@
 </section>
 
 <section class="card">
-  <h2>{{t "SafeLine rules"}}</h2>
-  <p class="muted small">{{t "Read only. Rules are edited in the SafeLine console."}}</p>
-  {{if $d.Policies}}
-  <div class="scroll">
-  <table>
-    <thead><tr><th>{{t "Rule"}}</th><th>{{t "Action"}}</th><th>{{t "Conditions"}}</th><th>{{t "State"}}</th><th>{{t "Author"}}</th></tr></thead>
-    <tbody>
-    {{range $d.Policies}}<tr class="{{if not .IsEnabled}}off{{end}}">
-      <td>{{.Name}}{{if .Builtin}} <small class="muted">{{t "built-in"}}</small>{{end}}</td>
-      <td>{{if eq .Action 1}}<span class="badge bad">✕ {{t "deny"}}</span>{{else}}<span class="badge good">✓ {{t "allow"}}</span>{{end}}</td>
-      <td class="mono small">{{.Conditions}}</td>
-      <td>{{if .IsEnabled}}{{t "enabled"}}{{else}}{{t "disabled"}}{{end}}</td>
-      <td>{{.Creator}}</td>
-    </tr>{{end}}
-    </tbody>
-  </table>
+  <div class="cardhead">
+    <h2>{{t "SafeLine rules"}}</h2>
+    <a class="btn" href="/policies?instance={{$c.ID}}">{{t "Allow & Deny"}} →</a>
   </div>
-  {{end}}
+  <p class="muted small">{{t "Allow and deny rules are listed and edited on the Allow & Deny page."}}</p>
 </section>
 
 <section class="card">

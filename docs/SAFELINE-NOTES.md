@@ -13,6 +13,9 @@ What we learned about SafeLine CE 9.4.x while building the panel.
 - `GET /api/stat/qps?count=N` returns five-second buckets; divide by five for requests per second.
 - Site modes: `0` defense, `1` offline, `2` monitoring (detect only).
 - `GET /api/open/cert/{id}` returns the private key; the panel never calls it.
+- A site's `title` is not a name: `mgt` fills it from the `<title>` of the upstream's home page and overwrites what is sent. The name typed in the console is `comment`.
+- Upstreams on loopback and other special-use addresses are refused ("special-use address is not allowed").
+- Allow & Deny rules (`/api/open/policy`): `action` 0 allow, 1 deny; `log` writes allowed requests to the log, `monitor` makes a deny rule record only. `pattern` is OR of AND groups of `{k, op, v[], sub_k}`; `sub_k` is the header or parameter name. Update is `PUT` with the create body plus `id` (without `insert_position` the rule keeps its place); delete is `DELETE` with the body `{"id": N}`. The operators each target accepts are listed in `internal/safeline/policies.go`; geo operators need a license and JA4 the commercial fingerprint database.
 
 ## Known issue: empty attack log after updating to images of 2026-10-23
 

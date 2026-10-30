@@ -108,9 +108,12 @@ type Policy struct {
 	IsEnabled bool              `json:"is_enabled"`
 	Builtin   bool              `json:"builtin"`
 	Pattern   [][]PolicyPattern `json:"pattern"`
-	Log       bool              `json:"log"`
+	Log       bool              `json:"log"`     // allow rules: still write matches to the log
+	Monitor   bool              `json:"monitor"` // deny rules: only record, do not block
+	Order     int               `json:"order"`
 	Creator   string            `json:"creator"`
-	ReqCount  int               `json:"req_count"`
+	ReqCount  int64             `json:"req_count"`
+	PassCount int64             `json:"pass_count"`
 }
 
 type PolicyPattern struct {

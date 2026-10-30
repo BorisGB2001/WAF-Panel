@@ -1,7 +1,8 @@
 # boris.gb 2026-10-30 10:04 - build and test; linux-amd64 for Debian servers
 # boris.gb 2026-10-30 15:06 - the service is wafpanel (alerts + SIEM + web panel); the version is stamped into the binary
 # boris.gb 2026-10-30 16:22 - 0.6.1: site name goes to comment (SafeLine owns title), row menu no longer clipped
-VERSION ?= 0.6.1
+# boris.gb 2026-10-30 16:38 - 0.7.0: Allow & Deny rules editor
+VERSION ?= 0.7.0
 LDFLAGS = -s -w -X main.version=$(VERSION)
 
 .PHONY: build linux test

@@ -1,0 +1,61 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := $d.Instance}}
+{{if gt (len $d.Instances) 1}}
+<form class="card filters" method="get" action="/policies">
+  <label>WAF<select name="instance" class="autosubmit">{{range $d.Instances}}<option value="{{.ID}}" {{if eq .ID $c.ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+</form>
+{{end}}
+
+<section class="card">
+  <div class="cardhead">
+    <h2>{{t "%d rules" (len $d.Rows)}}</h2>
+    <div class="badges">
+      <span class="badge">{{t "%d enabled" $d.Enabled}}</span>
+      <span class="badge bad">✕ {{t "%d deny" $d.Deny}}</span>
+      <span class="badge good">✓ {{t "%d allow" $d.Allow}}</span>
+      {{if .IsAdmin}}<a class="btn primary" href="/policies/new?instance={{$c.ID}}">+ {{t "Add rule"}}</a>{{end}}
+    </div>
+  </div>
+  <p class="muted small">{{t "SafeLine checks the rules from top to bottom and applies the first one that matches. An allow rule lets the request skip every other check, so keep allow rules narrow. Conditions in one box must all hold; any of the boxes is enough."}}</p>
+  <div class="scroll">
+  <table class="policies">
+    <thead><tr><th>#</th><th>{{t "Rule"}}</th><th>{{t "Action"}}</th><th>{{t "Conditions"}}</th><th>{{t "Hits"}}</th><th>{{t "Author"}}</th>{{if .IsAdmin}}<th></th>{{end}}</tr></thead>
+    <tbody>
+    {{range $d.Rows}}{{$p := .}}<tr class="{{if not .IsEnabled}}off{{end}}">
+      <td class="muted">{{.Pos}}</td>
+      <td><b>{{.Name}}</b>
+        {{if .Builtin}}<br><small class="muted">{{t "built-in"}}</small>{{end}}
+        {{if .Managed}}<br><small class="muted"><a href="/waf?instance={{$c.ID}}#block">{{t "panel blocklist"}}</a></small>{{end}}
+        {{if not .IsEnabled}}<br><span class="badge bad">✕ {{t "disabled"}}</span>{{end}}</td>
+      <td class="nowrap">{{if eq .Action 1}}{{if .Monitor}}<span class="badge warn">◐ {{t "deny, record only"}}</span>{{else}}<span class="badge bad">✕ {{t "deny"}}</span>{{end}}{{else}}<span class="badge good">✓ {{t "allow"}}</span>{{if .Log}}<br><small class="muted">{{t "logged"}}</small>{{end}}{{end}}</td>
+      <td><div class="conds">{{range $i, $g := .Groups}}{{if $i}}<span class="or">{{t "or"}}</span>{{end}}<div class="andgroup">{{range $j, $x := $g}}{{if $j}}<span class="and">{{t "and"}}</span>{{end}}<div class="cond"><span class="ck">{{t $x.KeyLabel}}{{if $x.Sub}} <code>{{$x.Sub}}</code>{{end}}</span> <span class="co">{{t $x.OpLabel}}</span>{{range $x.V}} <code>{{.}}</code>{{end}}</div>{{end}}</div>{{end}}</div></td>
+      <td class="num">{{num .ReqCount}}</td>
+      <td>{{.Creator}}</td>
+      {{if $.IsAdmin}}<td class="nowrap">
+        {{if .Editable}}<a class="btn sm" href="/policies/{{$c.ID}}/{{.ID}}/edit">{{t "Edit"}}</a>{{end}}
+        {{if not .Managed}}<details class="inline">
+          <summary class="btn sm">•••</summary>
+          <div class="menu">
+            <form method="post" action="/policies/{{$c.ID}}/{{.ID}}/enabled" class="stack">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="enabled" value="{{if .IsEnabled}}0{{else}}1{{end}}">
+              <b>{{if .IsEnabled}}{{t "Disable"}}{{else}}{{t "Enable"}}{{end}}</b>
+              <label>{{t "Reason"}}<input name="reason" required></label>
+              <button class="btn {{if or (and .IsEnabled (eq .Action 1)) (and (not .IsEnabled) (eq .Action 0))}}danger{{end}}">{{if .IsEnabled}}{{t "Disable"}}{{else}}{{t "Enable"}}{{end}}</button>
+            </form>
+            {{if not .Builtin}}<form method="post" action="/policies/{{$c.ID}}/{{.ID}}/delete" class="stack">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <b>{{t "Delete"}}</b>
+              <p class="muted small">{{t "The rule is removed from SafeLine. This cannot be undone."}}</p>
+              <label>{{t "Reason"}}<input name="reason" required></label>
+              <label>{{t "Type"}} <span class="mono">{{.Name}}</span><input name="confirm" required autocomplete="off"></label>
+              <button class="btn danger">{{t "Delete permanently"}}</button>
+            </form>{{end}}
+          </div>
+        </details>{{end}}
+      </td>{{end}}
+    </tr>{{else}}<tr><td colspan="7" class="muted">{{t "No rules."}}</td></tr>{{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{end}}

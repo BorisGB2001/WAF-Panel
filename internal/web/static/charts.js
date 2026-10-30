@@ -160,4 +160,84 @@
         .catch(function () {});
     }, 5000);
   }
+
+  // Allow & Deny editor: operators follow the target, the name field shows
+  // only for headers and parameters, and conditions and boxes can be added.
+  var groups = document.getElementById("orgroups");
+  if (groups) {
+    var examples = {
+      "src_ip eq": "203.0.113.5", "src_ip not_eq": "203.0.113.5", "src_ip match": "203.0.113.*",
+      "src_ip cidr": "203.0.113.0/24", "src_ip not_cidr": "203.0.113.0/24", "src_ip in": "IP group",
+      "src_ip not_in": "IP group", "uri prefix": "/admin", "uri_no_query prefix": "/admin",
+      "uri eq": "/index.html?a=1", "uri_no_query eq": "/login", "host eq": "shop.example.com",
+      "host match": "*.example.com", "method eq": "POST", "method not_eq": "GET", "website eq": "shop.example.com",
+      "website not_eq": "shop.example.com"
+    };
+    var syncRow = function (row) {
+      var k = row.querySelector(".ck"), op = row.querySelector(".cop");
+      var sub = row.querySelector(".csub"), v = row.querySelector(".cv");
+      var first = null;
+      Array.prototype.forEach.call(op.options, function (o) {
+        var ok = (" " + o.dataset.keys + " ").indexOf(" " + k.value + " ") >= 0;
+        o.hidden = !ok;
+        o.disabled = !ok;
+        if (ok && !first) first = o;
+      });
+      if (op.selectedOptions[0] && op.selectedOptions[0].disabled && first) op.value = first.value;
+      sub.hidden = k.selectedOptions[0].dataset.name !== "name";
+      var none = op.value === "exist" || op.value === "not_exist";
+      v.hidden = none;
+      if (none) v.value = "";
+      v.placeholder = examples[k.value + " " + op.value] || v.dataset.ph || v.placeholder;
+    };
+    var bindRow = function (row) {
+      var v = row.querySelector(".cv");
+      v.dataset.ph = v.dataset.ph || v.placeholder;
+      row.querySelector(".ck").addEventListener("change", function () { syncRow(row); });
+      row.querySelector(".cop").addEventListener("change", function () { syncRow(row); });
+      row.querySelector(".cdel").addEventListener("click", function () {
+        var box = row.closest(".orgroup");
+        if (box.querySelectorAll(".condrow").length > 1) row.remove();
+        else if (groups.querySelectorAll(".orgroup").length > 1) box.remove();
+        else { row.querySelector(".cv").value = ""; row.querySelector(".csub").value = ""; }
+      });
+      syncRow(row);
+    };
+    var blankRow = function (g) {
+      var row = groups.querySelector(".condrow").cloneNode(true);
+      row.querySelector("[name=g]").value = g;
+      row.querySelector(".ck").selectedIndex = 0;
+      row.querySelector(".cop").selectedIndex = 0;
+      row.querySelector(".csub").value = "";
+      row.querySelector(".cv").value = "";
+      bindRow(row);
+      return row;
+    };
+    var bindBox = function (box) {
+      box.querySelector(".addand").addEventListener("click", function (e) {
+        e.currentTarget.before(blankRow(box.querySelector("[name=g]").value));
+      });
+    };
+    groups.querySelectorAll(".condrow").forEach(bindRow);
+    groups.querySelectorAll(".orgroup").forEach(bindBox);
+    groups.querySelector(".addor").addEventListener("click", function (e) {
+      var g = String(groups.dataset.next++);
+      var box = groups.querySelector(".orgroup").cloneNode(false);
+      box.appendChild(groups.querySelector(".orgroup legend").cloneNode(true));
+      box.appendChild(blankRow(g));
+      box.appendChild(groups.querySelector(".addand").cloneNode(true));
+      bindBox(box);
+      e.currentTarget.before(box);
+    });
+    // Notes that apply only to the chosen action.
+    var form = groups.closest("form");
+    var syncAction = function () {
+      var a = form.querySelector("[name=action]:checked");
+      form.querySelectorAll("[data-for-action]").forEach(function (el) {
+        el.hidden = !a || el.dataset.forAction !== a.value;
+      });
+    };
+    form.querySelectorAll("[name=action]").forEach(function (r) { r.addEventListener("change", syncAction); });
+    syncAction();
+  }
 })();

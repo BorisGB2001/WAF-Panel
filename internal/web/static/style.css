@@ -320,3 +320,32 @@ tr.off td { opacity: .55; }
 body.bare .langs a { color: var(--muted); }
 .atype { white-space: nowrap; }
 code.hl { font-family: var(--mono); background: var(--bad-bg); color: var(--bad); padding: 1px 6px; border-radius: 4px; word-break: break-all; }
+
+/* Allow & Deny: conditions read as "A and B / or / C". */
+.conds { display: flex; flex-direction: column; gap: 4px; min-width: 260px; }
+.andgroup { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.cond { font-size: 12.5px; line-height: 1.5; }
+.cond .ck { font-weight: 600; }
+.cond .co { color: var(--muted); }
+.cond code { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--line); padding: 0 5px; border-radius: 4px; word-break: break-all; }
+.conds .or, .conds-edit .or { align-self: flex-start; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.conds .and { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+table.policies td { vertical-align: top; }
+table.policies td.num { font-variant-numeric: tabular-nums; text-align: right; }
+.policyform { display: flex; flex-direction: column; gap: 16px; }
+.policyform fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px 14px; margin: 0; }
+.actionpick { display: flex; flex-direction: column; gap: 6px; }
+.actionpick .sub { margin-left: 28px; color: var(--muted); }
+.conds-edit { display: flex; flex-direction: column; gap: 10px; }
+.orgroup { display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.orgroup:first-of-type legend { display: none; }
+.condrow { display: grid; grid-template-columns: 190px 170px 210px 1fr auto; gap: 8px; align-items: start; }
+.condrow .csub[hidden] { display: block; visibility: hidden; }
+.condrow textarea { min-height: 36px; resize: vertical; }
+.addand, .addor { align-self: flex-start; }
+@media (max-width: 900px) {
+  .condrow { grid-template-columns: 1fr 1fr; }
+  .condrow .csub[hidden] { display: none; }
+  .condrow textarea { grid-column: 1 / -1; }
+}
+.actionpick label[hidden], .condrow textarea[hidden] { display: none; }

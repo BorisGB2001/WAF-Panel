@@ -114,11 +114,6 @@ func (s *Server) renderWAF(w http.ResponseWriter, r *http.Request, rc *reqCtx, f
 	} else {
 		data["Block"] = st
 	}
-	if ps, err := c.Policies(ctx); err != nil {
-		errs = append(errs, tr(r, "rules")+": "+err.Error())
-	} else {
-		data["Policies"] = ps
-	}
 	if gs, err := c.IPGroups(ctx); err != nil {
 		errs = append(errs, tr(r, "IP groups")+": "+err.Error())
 	} else {
