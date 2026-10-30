@@ -136,7 +136,11 @@ func (p Policy) Conditions() string {
 	for _, and := range p.Pattern {
 		var parts []string
 		for _, x := range and {
-			parts = append(parts, fmt.Sprintf("%s %s %s", x.K, x.Op, strings.Join(x.V, ",")))
+			k := x.K
+			if x.SubK != "" {
+				k += "[" + x.SubK + "]"
+			}
+			parts = append(parts, strings.TrimSpace(fmt.Sprintf("%s %s %s", k, x.Op, strings.Join(x.V, ","))))
 		}
 		ors = append(ors, strings.Join(parts, " AND "))
 	}

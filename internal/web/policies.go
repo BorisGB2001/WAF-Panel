@@ -94,6 +94,9 @@ type policyRow struct {
 	Pos     int
 	Groups  [][]condView
 	Managed bool // the panel's own blocklist rule
+	// Tie is set when another custom rule has the same order: SafeLine does
+	// not renumber on insert, and their relative order is then not defined.
+	Tie bool
 }
 
 // Editable reports whether the panel's editor can represent the rule.
@@ -133,6 +136,15 @@ func (s *Server) policyRows(ctx context.Context, c *safeline.Client) ([]policyRo
 			}
 			rows[i].Groups = append(rows[i].Groups, g)
 		}
+	}
+	orders := map[int]int{}
+	for _, x := range rows {
+		if !x.Builtin {
+			orders[x.Order]++
+		}
+	}
+	for i := range rows {
+		rows[i].Tie = !rows[i].Builtin && orders[rows[i].Order] > 1
 	}
 	return rows, n, nil
 }

@@ -22,7 +22,7 @@
     <thead><tr><th>#</th><th>{{t "Rule"}}</th><th>{{t "Action"}}</th><th>{{t "Conditions"}}</th><th>{{t "Hits"}}</th><th>{{t "Author"}}</th>{{if .IsAdmin}}<th></th>{{end}}</tr></thead>
     <tbody>
     {{range $d.Rows}}{{$p := .}}<tr class="{{if not .IsEnabled}}off{{end}}">
-      <td class="muted">{{.Pos}}</td>
+      <td class="muted">{{.Pos}}{{if .Tie}} <span class="badge warn" title="{{t "Another rule has the same position in SafeLine, so which of them is checked first is not defined. Move one of them to the top or the bottom."}}">=</span>{{end}}</td>
       <td><b>{{.Name}}</b>
         {{if .Builtin}}<br><small class="muted">{{t "built-in"}}</small>{{end}}
         {{if .Managed}}<br><small class="muted"><a href="/waf?instance={{$c.ID}}#block">{{t "panel blocklist"}}</a></small>{{end}}

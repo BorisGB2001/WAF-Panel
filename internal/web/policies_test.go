@@ -97,6 +97,9 @@ func TestPolicies(t *testing.T) {
 	if strings.Contains(page, "/policies/prod/1/edit") || strings.Contains(page, "/policies/prod/9/edit") || !strings.Contains(page, "/policies/prod/8/edit") {
 		t.Fatal("only rules the editor can represent get an Edit link")
 	}
+	if strings.Count(page, "Another rule has the same position") != 2 {
+		t.Error("Office and Geo share order 0 and must both be marked")
+	}
 	if len(fake.calls) != 0 {
 		t.Fatalf("viewing wrote: %v", fake.calls)
 	}
