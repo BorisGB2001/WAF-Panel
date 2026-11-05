@@ -1,0 +1,99 @@
+{{define "content"}}
+{{$d := .Data}}{{$ip := $d.IP}}
+<div class="card iphead">
+  <div class="ipname"><span class="mono big">{{$ip}}</span>
+    {{if $d.Private}}<span class="badge">🏠 {{t "Private network"}}</span>
+    {{else if $d.Place.Name}}<span class="badge">{{$d.Flag}} {{$d.Place.Name}}{{if $d.Place.City}}, {{$d.Place.City}}{{end}}</span>{{end}}
+    {{if $d.Offences}}<span class="badge bad">{{t "auto-banned %d time(s) lately" $d.Offences}}</span>{{end}}
+  </div>
+  {{if $d.Proxy}}<div class="note warn">⚠ {{t "This private address carries most of the traffic: it is most likely the front proxy, and every visitor comes through it. Blocking it would cut everyone off."}}</div>{{end}}
+</div>
+
+{{range $d.Instances}}{{$v := .}}{{$c := .Instance}}
+<section class="card">
+  <div class="cardhead">
+    <h2>{{if gt (len $d.Instances) 1}}{{$c.Name}} · {{end}}{{t "Last 30 days"}}</h2>
+    <span>
+      {{if .Allowed}}<span class="badge good">✓ {{t "on the allow list"}}</span>{{end}}
+      {{if .Blocked}}<span class="badge bad">⛔ {{t "blocked"}}{{if .BlockKnown}}{{if .Block.Expires.IsZero}} · {{t "permanent"}}{{else}} · {{t "until %s" (dt .Block.Expires)}}{{end}}{{end}}</span>{{else if not .Allowed}}<span class="badge">{{t "not blocked"}}</span>{{end}}
+    </span>
+  </div>
+  {{if .Err}}<div class="note err">SafeLine: {{.Err}}</div>{{end}}
+  {{if and .Blocked .BlockKnown}}<p class="small">{{t "Blocked by %s on %s: %s" .Block.By (dt .Block.At) .Block.Reason}}{{if .Block.Rule}} · <span class="muted">{{t "rule"}}: {{.Block.Rule}}</span>{{end}}</p>{{end}}
+  {{if and .Allowed .AllowKnown}}<p class="small">{{t "Allowed by %s on %s: %s" .Allow.By (dt .Allow.At) .Allow.Reason}}</p>{{end}}
+
+  <div class="tiles four">
+    <div class="tile"><span>{{t "Attacks"}}</span><b>{{num .Total}}</b></div>
+    <div class="tile"><span>{{t "Blocked"}}</span><b>{{.Denied}}</b>{{if .Partial}}<small>{{t "of the latest %d" .Read}}</small>{{end}}</div>
+    <div class="tile"><span>{{t "First seen"}}</span><b class="smallnum">{{if .First.IsZero}}—{{else}}{{dt .First}}{{end}}</b></div>
+    <div class="tile"><span>{{t "Last seen"}}</span><b class="smallnum">{{if .Last.IsZero}}—{{else}}{{ago .Last}}{{end}}</b></div>
+  </div>
+
+  {{if .Total}}
+  <div class="grid3">
+    <div><h3>{{t "Attack types"}}</h3><table class="compact">{{range .Types}}<tr><td>{{atypeName .Key}}</td><td class="num">{{.Count}}</td></tr>{{end}}</table></div>
+    <div><h3>{{t "Sites"}}</h3><table class="compact">{{range .Hosts}}<tr><td>{{.Key}}</td><td class="num">{{.Count}}</td></tr>{{end}}</table></div>
+    <div><h3>{{t "Paths"}}</h3><table class="compact">{{range .Paths}}<tr><td class="url">{{cut .Key 60}}</td><td class="num">{{.Count}}</td></tr>{{end}}</table></div>
+  </div>
+  <h3>{{t "Latest attacks"}} <a class="small" href="/attacks?instance={{$c.ID}}&amp;period=30d&amp;ip={{urlquery $ip}}">{{t "all in the attack log"}} →</a></h3>
+  <div class="scroll"><table class="attacks">
+    <thead><tr><th>{{t "Time"}}</th><th>{{t "Site and URL"}}</th><th>{{t "Type"}}</th><th>{{t "Action"}}</th></tr></thead>
+    <tbody>{{range .Rows}}<tr>
+      <td class="nowrap"><a href="/attacks/{{$c.ID}}/{{.EventID}}">{{dt .Time}}</a></td>
+      <td class="url"><span class="muted">{{.Host}}</span>{{cut .URLPath 90}}</td>
+      <td><span class="atype">{{atype .AttackType}}</span></td>
+      <td>{{if .Denied}}<span class="badge good">✓ {{t "blocked"}}</span>{{else}}<span class="badge warn">! {{t "passed"}}</span>{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else if not .Err}}<p class="muted">{{t "SafeLine recorded no attacks from this address in 30 days."}}</p>{{end}}
+
+  {{if $.IsAdmin}}
+  <div class="ipactions">
+    {{if .Blocked}}
+      <form method="post" action="/waf/{{$c.ID}}/unblock" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{$ip}}"><input type="hidden" name="back" value="{{$.Here}}"><button class="btn">{{t "Unblock"}}</button></form>
+      <form method="post" action="/waf/{{$c.ID}}/expiry" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{$ip}}"><input type="hidden" name="back" value="{{$.Here}}">
+        <select name="ttl">{{range $d.TTLs}}<option value="{{.Key}}">{{t .Label}}</option>{{end}}</select><button class="btn">{{t "Change the term"}}</button></form>
+    {{else if .WhyNot}}
+      <span class="muted small">{{t "Cannot be blocked: %s" (t .WhyNot)}}</span>
+    {{else}}
+      <form method="post" action="/waf/{{$c.ID}}/block" class="inline blockinline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{$ip}}"><input type="hidden" name="back" value="{{$.Here}}">
+        <select name="ttl">{{range $d.TTLs}}<option value="{{.Key}}" {{if eq .Key "24h"}}selected{{end}}>{{t .Label}}</option>{{end}}</select>
+        <input name="reason" required placeholder="{{t "Reason"}}">
+        {{if $d.Private}}<label class="check"><input type="checkbox" name="private" value="1" required> {{t "I know this is a private address"}}</label>{{end}}
+        <button class="btn danger">{{t "Block"}}</button></form>
+    {{end}}
+    {{if .Allowed}}
+      {{if .AllowKnown}}<form method="post" action="/waf/{{$c.ID}}/allow/remove" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{$ip}}"><input type="hidden" name="back" value="{{$.Here}}"><button class="btn">{{t "Remove from the allow list"}}</button></form>{{end}}
+    {{else}}
+      <details class="inline"><summary class="btn">{{t "Allow…"}}</summary>
+        <form method="post" action="/waf/{{$c.ID}}/allow" class="stack"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{$ip}}"><input type="hidden" name="back" value="{{$.Here}}">
+          <p class="muted small">{{t "An allowed address skips SafeLine's checks and is never blocked by the panel."}}</p>
+          <label>{{t "Reason"}}<input name="reason" required placeholder="{{t "office, monitoring, partner…"}}"></label>
+          <button class="btn primary">{{t "Add to the allow list"}}</button></form>
+      </details>
+    {{end}}
+  </div>
+  {{end}}
+</section>
+{{end}}
+
+{{if $d.Traffic}}
+<section class="card">
+  <h2>{{t "Traffic from the access logs, 30 days"}}</h2>
+  <table class="compact">
+    <thead><tr><th>WAF</th><th class="num">{{t "Requests"}}</th><th class="num">{{t "share"}}</th><th class="num">4xx</th><th class="num">5xx</th><th class="num">{{t "Traffic"}}</th></tr></thead>
+    <tbody>{{range $d.Traffic}}<tr><td>{{.Instance}}</td><td class="num">{{num .N}}</td><td class="num">{{.Share}}</td><td class="num">{{num .E4}}</td><td class="num">{{num .E5}}</td><td class="num">{{bytes .Bytes}}</td></tr>{{end}}</tbody>
+  </table>
+</section>
+{{end}}
+
+{{if $d.Decisions}}
+<section class="card">
+  <h2>{{t "Auto-ban decisions"}}</h2>
+  <table class="compact">
+    <thead><tr><th>{{t "Time"}}</th><th>{{t "Rule"}}</th><th>{{t "Reason"}}</th><th>{{t "Result"}}</th></tr></thead>
+    <tbody>{{range $d.Decisions}}<tr><td class="nowrap">{{dt .At}}</td><td>{{.Rule}}</td><td>{{.Reason}}</td><td>{{template "result" .Result}}</td></tr>{{end}}</tbody>
+  </table>
+</section>
+{{end}}
+{{end}}

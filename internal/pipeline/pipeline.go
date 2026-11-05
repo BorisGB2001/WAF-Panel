@@ -29,6 +29,8 @@ type Pipeline struct {
 	Log      *slog.Logger
 	// DryRun logs alerts instead of sending them.
 	DryRun bool
+	// Tap sees every event, e.g. for the auto-ban; it must not block.
+	Tap func(safeline.Event)
 
 	once   sync.Once
 	reload chan []config.Rule
@@ -67,6 +69,9 @@ func (p *Pipeline) Run(ctx context.Context, events <-chan safeline.Event) {
 }
 
 func (p *Pipeline) handle(ev safeline.Event) {
+	if p.Tap != nil {
+		p.Tap(ev)
+	}
 	if !p.DryRun {
 		for _, s := range p.SIEM {
 			s.Enqueue(ev)

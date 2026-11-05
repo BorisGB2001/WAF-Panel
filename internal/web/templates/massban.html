@@ -1,0 +1,40 @@
+{{define "content"}}
+{{$d := .Data}}
+{{if $d}}{{$q := $d.Q}}
+<form class="filters card" method="get" action="/massban">
+  <input type="hidden" name="instance" value="{{$q.Instance}}"><input type="hidden" name="by" value="{{$q.By}}"><input type="hidden" name="value" value="{{$q.Value}}">
+  <label>{{t "Matching"}}<input value="{{if eq $q.By "type"}}{{atypeName $d.Label}}{{else}}{{$d.Label}}{{end}}" disabled></label>
+  <label>{{t "Site"}}<input name="host" value="{{$q.Host}}" placeholder="{{t "every site"}}"></label>
+  <label>{{t "Period"}}<select name="period">{{range $d.Periods}}<option value="{{.Key}}" {{if eq .Key $q.Period}}selected{{end}}>{{t .Label}}</option>{{end}}</select></label>
+  <div class="actions"><button class="btn">{{t "Show"}}</button></div>
+</form>
+
+<div class="card">
+  <div class="cardhead"><h2>{{t "%d request(s) from %d address(es)" $d.N (len $d.Rows)}}</h2>{{if $d.Partial}}<span class="muted small">{{t "only the latest records were read"}}</span>{{end}}</div>
+  {{if $d.Visitors}}<div class="note warn">⚠ {{t "This list looks like ordinary visitors rather than attackers: most addresses were let through or made a single request. Check it before blocking."}}</div>{{end}}
+  {{if $d.Rows}}
+  <form method="post" action="/massban" data-confirm="{{t "Block the chosen addresses?"}}">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="instance" value="{{$q.Instance}}"><input type="hidden" name="by" value="{{$q.By}}"><input type="hidden" name="value" value="{{$q.Value}}"><input type="hidden" name="host" value="{{$q.Host}}"><input type="hidden" name="period" value="{{$q.Period}}">
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>{{t "Address"}}</th><th class="num">{{t "Requests"}}</th><th class="num">{{t "Blocked"}}</th><th class="num">{{t "Paths"}}</th><th>{{t "Last seen"}}</th><th></th></tr></thead>
+      <tbody>{{range $d.Rows}}<tr>
+        <td>{{if and (not .Blocked) (not .Skip)}}<input type="checkbox" name="ip" value="{{.IP}}" checked aria-label="{{.IP}}">{{end}}</td>
+        <td class="mono"><a href="/ip/{{.IP}}">{{.IP}}</a>{{cc .IP}}</td>
+        <td class="num">{{.N}}</td><td class="num">{{.Denied}}</td><td class="num">{{.Paths}}</td>
+        <td class="nowrap">{{ago .Last}}</td>
+        <td>{{if .Blocked}}<span class="badge bad">⛔ {{t "blocked"}}</span>{{else if .Skip}}<span class="badge">{{t "skipped"}}: {{t .Skip}}</span>{{end}}</td>
+      </tr>{{end}}</tbody>
+    </table></div>
+    {{if $d.Todo}}
+    <div class="blockform">
+      <label>{{t "Duration"}}<select name="ttl">{{range $d.TTLs}}<option value="{{.Key}}" {{if eq .Key "7d"}}selected{{end}}>{{t .Label}}</option>{{end}}</select></label>
+      <label class="grow">{{t "Reason"}}<input name="reason" required value="{{t "everyone who did %s" (printf "%s %s" $q.By $d.Label)}}"></label>
+      <div class="actions"><button class="btn danger">{{t "Block %d address(es)" $d.Todo}}</button></div>
+    </div>
+    {{else}}<p class="muted">{{t "Nothing left to block."}}</p>{{end}}
+  </form>
+  {{else}}<p class="muted">{{t "No addresses did this in the period."}}</p>{{end}}
+</div>
+{{end}}
+{{end}}

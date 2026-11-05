@@ -175,3 +175,26 @@ func TestCollectorAndStore(t *testing.T) {
 		t.Fatal("lines read twice after a restart")
 	}
 }
+
+func TestDeviceAndSource(t *testing.T) {
+	for ua, want := range map[string]string{
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36":                    "Desktop",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148":                  "Phone",
+		"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36":              "Phone",
+		"Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1": "Tablet",
+		"Mozilla/5.0 (Linux; Android 13; SM-X200) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36":                     "Tablet",
+		"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)":                                                       "Bot",
+		"curl/8.5.0": "Script",
+		"":           "Script",
+	} {
+		if got := Device(ua, ParseUA(ua)); got != want {
+			t.Errorf("%q: %s, want %s", ua, got, want)
+		}
+	}
+	for host, want := range map[string]string{"": "Direct", "www.google.com": "Search engines", "yandex.ru": "Search engines",
+		"m.vk.com": "Social networks", "t.me": "Social networks", "partner.example.org": "Other sites", "notgoogle.example": "Other sites"} {
+		if got := Source(host); got != want {
+			t.Errorf("%q: %s, want %s", host, got, want)
+		}
+	}
+}

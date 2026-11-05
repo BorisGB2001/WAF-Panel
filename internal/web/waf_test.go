@@ -58,14 +58,17 @@ func (f *statefulSafeLine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.groups = append(f.groups, safeline.IPGroup{ID: 10 + len(f.groups), Comment: body["comment"].(string), IPs: ips})
 		ok(nil)
 	case "POST /api/open/ipgroup/append":
-		f.groups[0].IPs = append(f.groups[0].IPs, body["ips"].([]any)[0].(string))
+		g := f.group(body["ip_group_ids"].([]any)[0])
+		for _, x := range body["ips"].([]any) {
+			g.IPs = append(g.IPs, x.(string))
+		}
 		ok(nil)
 	case "PUT /api/open/ipgroup":
 		var ips []string
 		for _, x := range body["ips"].([]any) {
 			ips = append(ips, x.(string))
 		}
-		f.groups[0].IPs = ips
+		f.group(body["id"]).IPs = ips
 		ok(nil)
 	case "GET /api/open/policy":
 		ok(map[string]any{"total": len(f.policies), "data": f.policies})
@@ -73,11 +76,33 @@ func (f *statefulSafeLine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.Marshal(body["pattern"])
 		var p [][]safeline.PolicyPattern
 		json.Unmarshal(b, &p)
-		f.policies = append(f.policies, safeline.Policy{ID: 7, Name: body["name"].(string), Action: 1, IsEnabled: true, Pattern: p})
+		f.policies = append(f.policies, safeline.Policy{ID: 7 + len(f.policies), Name: body["name"].(string), Action: int(body["action"].(float64)),
+			IsEnabled: body["is_enabled"].(bool), Monitor: body["monitor"] == true, Pattern: p})
+		ok(nil)
+	case "PUT /api/open/policy":
+		for i := range f.policies {
+			if float64(f.policies[i].ID) == body["id"] {
+				f.policies[i].IsEnabled, f.policies[i].Monitor = body["is_enabled"].(bool), body["monitor"] == true
+			}
+		}
+		ok(nil)
+	case "DELETE /api/open/policy":
+		f.policies = slices.DeleteFunc(f.policies, func(p safeline.Policy) bool { return float64(p.ID) == body["id"] })
 		ok(nil)
 	default:
 		readOnlySafeLine().ServeHTTP(w, r)
 	}
+}
+
+// group finds a group by the id of a request body; the first one when the
+// body has none.
+func (f *statefulSafeLine) group(id any) *safeline.IPGroup {
+	for i := range f.groups {
+		if float64(f.groups[i].ID) == id {
+			return &f.groups[i]
+		}
+	}
+	return &f.groups[0]
 }
 
 func TestWAFManagement(t *testing.T) {

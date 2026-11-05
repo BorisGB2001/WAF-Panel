@@ -4,7 +4,9 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"slices"
 	"time"
 
 	"wafpanel/internal/auth"
@@ -32,6 +34,22 @@ func securityHeaders(next http.Handler) http.Handler {
 		}
 		h.Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
+	})
+}
+
+// allowFrom lets in only the sources of web.allow_from, when set.
+func (s *Server) allowFrom(next http.Handler) http.Handler {
+	nets := s.Cfg.Web.AllowNets
+	if len(nets) == 0 {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		a, err := netip.ParseAddr(clientIP(r))
+		if err == nil && slices.ContainsFunc(nets, func(p netip.Prefix) bool { return p.Contains(a.Unmap()) }) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		http.Error(w, "Forbidden", http.StatusForbidden)
 	})
 }
 

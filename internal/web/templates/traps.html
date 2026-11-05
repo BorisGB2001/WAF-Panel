@@ -1,0 +1,50 @@
+{{define "content"}}
+{{$d := .Data}}
+{{if not $d}}<div class="note warn">{{t "The auto-ban needs the web panel's data directory; it is not running."}}</div>{{else}}
+<p class="muted">{{t "A trap is a path no real visitor asks for, like /.env or /.git/. Whoever requests it is blocked, whether the auto-ban is on or not, at most once an hour per address. For every trap the panel keeps a deny rule in SafeLine, so the request gets 403 and lands in the attack log even when the WAF finds nothing in it. In dry run that rule only records, and nobody is blocked. Private addresses, protected addresses and the allow list are never blocked."}}</p>
+
+<section class="card">
+  <div class="cardhead"><h2>{{t "Traps"}}</h2>
+  <span>{{if and .IsAdmin $d.Missing}}<form method="post" action="/traps/sync" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn danger" title="{{t "Some rules were deleted in the SafeLine console"}}">{{t "Restore the SafeLine rules"}}</button></form>{{end}}
+  {{if and .IsAdmin $d.Defaults}}<form method="post" action="/traps/defaults" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn" title="{{join $d.Defaults ", "}}">{{t "Add the default traps (dry run)"}}</button></form>{{end}}</span></div>
+  {{if $d.Traps}}
+  <div class="scroll"><table>
+    <thead><tr><th>#</th><th>{{t "Path"}}</th><th>{{t "Site"}}</th><th>{{t "Ban for"}}</th><th class="num">{{t "Hits"}}</th><th>{{t "Last hit"}}</th><th>{{t "State"}}</th>{{if $.IsAdmin}}<th></th>{{end}}</tr></thead>
+    <tbody>{{range $d.Traps}}<tr>
+      <td>{{.ID}}</td>
+      <td class="mono">{{.Path}} <small class="muted">{{if eq .Match "part"}}{{t "anywhere in the path"}}{{else}}{{t "path starts with"}}{{end}}</small></td>
+      <td>{{if .Site}}{{.Site}}{{else}}<span class="muted">{{t "every site"}}</span>{{end}}</td>
+      <td>{{term .Duration}}</td>
+      <td class="num">{{.Hits}}</td>
+      <td class="nowrap">{{if .Last.IsZero}}—{{else}}{{ago .Last}}{{end}}</td>
+      <td>{{if not .Enabled}}<span class="badge">{{t "off"}}</span>{{else if .DryRun}}<span class="badge warn">◐ {{t "dry run"}}</span>{{else}}<span class="badge good">● {{t "on"}}</span>{{end}}
+        {{if .Missing}}<span class="badge bad" title="{{join .Missing ", "}}">{{t "no SafeLine rule"}}</span>{{end}}</td>
+      {{if $.IsAdmin}}<td class="nowrap">
+        <form method="post" action="/traps/{{.ID}}/enabled" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}"><button class="btn xs">{{if .Enabled}}{{t "Turn off"}}{{else}}{{t "Turn on"}}{{end}}</button></form>
+        <form method="post" action="/traps/{{.ID}}/dry_run" class="inline" {{if .DryRun}}data-confirm="{{t "From now on whoever requests %s is blocked. Go on?" .Path}}"{{end}}><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="on" value="{{if .DryRun}}0{{else}}1{{end}}"><button class="btn xs {{if .DryRun}}danger{{end}}">{{if .DryRun}}{{t "Block for real"}}{{else}}{{t "Dry run"}}{{end}}</button></form>
+        <details class="inline"><summary class="btn xs">{{t "Delete…"}}</summary>
+          <form method="post" action="/traps/{{.ID}}/delete" class="stack"><input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <label class="check"><input type="checkbox" name="unblock" value="1"> {{t "Also unblock the addresses this trap blocked"}}</label>
+            <button class="btn xs danger">{{t "Delete the trap and its SafeLine rule"}}</button></form></details>
+      </td>{{end}}
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<p class="muted">{{t "No traps yet."}}</p>{{end}}
+</section>
+
+{{if .IsAdmin}}
+<section class="card">
+  <h2>{{t "New trap"}}</h2>
+  <form method="post" action="/traps" class="trapform">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>{{t "Path"}}<input name="path" required value="{{$d.Prefill}}" placeholder="/.env"></label>
+    <label>{{t "Match"}}<select name="match"><option value="part">{{t "anywhere in the path"}}</option><option value="prefix">{{t "path starts with"}}</option></select></label>
+    <label>{{t "Site"}}<input name="site" placeholder="{{t "every site"}}"></label>
+    <label>{{t "Ban for"}}<select name="duration">{{range $d.Durations}}<option value="{{.Key}}" {{if eq .Key "7d"}}selected{{end}}>{{t .Label}}</option>{{end}}</select></label>
+    <label class="check"><input type="checkbox" name="dry_run" value="1" checked> {{t "Dry run"}}</label>
+    <div class="actions"><button class="btn primary">{{t "Set the trap"}}</button></div>
+  </form>
+</section>
+{{end}}
+{{end}}
+{{end}}

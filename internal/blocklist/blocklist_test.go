@@ -55,9 +55,9 @@ func (f *fakeAPI) AppendIPGroup(_ context.Context, id int, ips []string) error {
 	return nil
 }
 func (f *fakeAPI) Policies(context.Context) ([]safeline.Policy, error) { return f.policies, nil }
-func (f *fakeAPI) CreateDenyGroupPolicy(_ context.Context, name string, gid int) error {
+func (f *fakeAPI) CreateGroupPolicy(_ context.Context, name string, gid, action int) error {
 	f.writes++
-	f.policies = append(f.policies, safeline.Policy{ID: 99, Name: name, Action: 1, IsEnabled: true,
+	f.policies = append(f.policies, safeline.Policy{ID: 99 + len(f.policies), Name: name, Action: action, IsEnabled: true,
 		Pattern: [][]safeline.PolicyPattern{{{K: "src_ip", Op: "in", V: []string{itoa(gid)}}}}})
 	return nil
 }

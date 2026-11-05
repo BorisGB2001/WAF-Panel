@@ -6,7 +6,8 @@
 # boris.gb 2026-10-30 16:54 - 0.8.0: allow and deny lists with their own order, reordering
 # boris.gb 2026-10-30 18:15 - 0.9.0: traffic analytics from tengine's logs
 # boris.gb 2026-10-30 18:58 - 0.9.1: theme switch (light, dark, system), compact language and theme switches
-VERSION ?= 0.9.1
+# boris.gb 2026-11-05 13:02 - 0.10.0: address page and search, allow list, auto-ban, traps, ban by attack, analysis, visitor sources
+VERSION ?= 0.10.0
 LDFLAGS = -s -w -X main.version=$(VERSION)
 
 .PHONY: build linux test

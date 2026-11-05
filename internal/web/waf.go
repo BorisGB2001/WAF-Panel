@@ -49,19 +49,41 @@ func (s *Server) blocklist(c *safeline.Client) *blocklist.Manager {
 	}
 	m := &blocklist.Manager{Instance: c.ID, API: c, Log: s.Log,
 		File: filepath.Join(s.Cfg.Web.DataDir, "blocklist-"+c.ID+".json")}
-	// Never let the panel lock out the WAF itself.
+	m.Protected = s.protectedNets(c)
+	s.blocklists[c.ID] = m
+	return m
+}
+
+// allowlist is the instance's allow list, created lazily like the blocklist.
+func (s *Server) allowlist(c *safeline.Client) *blocklist.Manager {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.allowlists == nil {
+		s.allowlists = map[string]*blocklist.Manager{}
+	}
+	if m := s.allowlists[c.ID]; m != nil {
+		return m
+	}
+	m := &blocklist.Manager{Instance: c.ID, API: c, Log: s.Log, Allow: true,
+		File: filepath.Join(s.Cfg.Web.DataDir, "allowlist-"+c.ID+".json")}
+	s.allowlists[c.ID] = m
+	return m
+}
+
+// protectedNets are never blocked: the WAF itself and block.protected.
+func (s *Server) protectedNets(c *safeline.Client) []netip.Prefix {
+	out := slices.Clone(s.Cfg.Block.ProtectedNets)
 	for _, in := range s.Cfg.Instances {
 		if in.ID != c.ID {
 			continue
 		}
 		if u, err := url.Parse(in.BaseURL); err == nil {
 			if a, err := netip.ParseAddr(u.Hostname()); err == nil {
-				m.Protected = append(m.Protected, netip.PrefixFrom(a, a.BitLen()))
+				out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
 			}
 		}
 	}
-	s.blocklists[c.ID] = m
-	return m
+	return out
 }
 
 // StartExpiry removes expired blocks on every instance until ctx ends.
@@ -114,6 +136,11 @@ func (s *Server) renderWAF(w http.ResponseWriter, r *http.Request, rc *reqCtx, f
 	} else {
 		data["Block"] = st
 	}
+	if st, err := s.allowlist(c).Status(ctx); err != nil {
+		errs = append(errs, tr(r, "allow list")+": "+err.Error())
+	} else {
+		data["Allow"] = st
+	}
 	if gs, err := c.IPGroups(ctx); err != nil {
 		errs = append(errs, tr(r, "IP groups")+": "+err.Error())
 	} else {
@@ -131,38 +158,90 @@ func (s *Server) wafBlock(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
 		http.NotFound(w, r)
 		return
 	}
+	fail := func(code int, msg string) {
+		if b := r.FormValue("back"); b != "" {
+			flashRedirect(w, r, backTo(r, "/waf"), "", msg)
+			return
+		}
+		w.WriteHeader(code)
+		s.renderWAF(w, r, rc, "", msg)
+	}
 	m := s.blocklist(c)
 	ip, err := m.Normalize(strings.TrimSpace(r.FormValue("ip")), clientIP(r))
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		s.renderWAF(w, r, rc, "", errText(r, err))
+		fail(http.StatusBadRequest, errText(r, err))
 		return
 	}
 	reason := strings.TrimSpace(r.FormValue("reason"))
 	if reason == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		s.renderWAF(w, r, rc, "", tr(r, "Give a reason for the block — it goes to the audit log"))
+		fail(http.StatusBadRequest, tr(r, "Give a reason for the block — it goes to the audit log"))
 		return
 	}
 	idx := slices.IndexFunc(blockTTLs, func(t ttlOption) bool { return t.Key == r.FormValue("ttl") })
 	if idx < 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		s.renderWAF(w, r, rc, "", tr(r, "Unknown block duration"))
+		fail(http.StatusBadRequest, tr(r, "Unknown block duration"))
 		return
 	}
 	ttl := blockTTLs[idx]
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	err = m.Block(ctx, ip, reason, rc.User.Name, ttl.D)
+	if why := s.whyNot(ctx, c, ip, false); why != "" {
+		fail(http.StatusBadRequest, tr(r, "%s cannot be blocked: %s", ip, tr(r, why)))
+		return
+	}
+	// A private address is most often a proxy in front of SafeLine:
+	// blocking it blocks everyone behind it.
+	if isPrivate(ip) && r.FormValue("private") != "1" {
+		fail(http.StatusBadRequest, tr(r, "%s is a private address, most likely a proxy in front of SafeLine. Tick the box to confirm you mean it", ip))
+		return
+	}
+	err = m.BlockMany(ctx, []string{ip}, blocklist.Meta{By: rc.User.Name, Reason: reason, Source: "manual"}, ttl.D)
 	detail := fmt.Sprintf("%s %s for %s: %s", c.ID, ip, ttl.Label, reason)
 	if err != nil {
 		s.audit.Log(rc.User.Name, clientIP(r), "waf.block.failed", detail+" — "+err.Error())
-		w.WriteHeader(http.StatusBadGateway)
-		s.renderWAF(w, r, rc, "", tr(r, "SafeLine rejected the block: %s", err))
+		fail(http.StatusBadGateway, tr(r, "SafeLine rejected the block: %s", err))
 		return
 	}
 	s.audit.Log(rc.User.Name, clientIP(r), "waf.block", detail)
-	flashRedirect(w, r, "/waf?instance="+url.QueryEscape(c.ID), tr(r, "Blocked %s (%s)", ip, tr(r, ttl.Label)), "")
+	flashRedirect(w, r, backTo(r, "/waf?instance="+url.QueryEscape(c.ID)), tr(r, "Blocked %s (%s)", ip, tr(r, ttl.Label)), "")
+}
+
+// wafBan is the one-click block next to an address: a day or for good.
+func (s *Server) wafBan(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
+	c := s.client(r.PathValue("instance"))
+	if c == nil {
+		http.NotFound(w, r)
+		return
+	}
+	back := backTo(r, "/attacks")
+	ip, err := s.blocklist(c).Normalize(strings.TrimSpace(r.FormValue("ip")), clientIP(r))
+	if err != nil {
+		flashRedirect(w, r, back, "", errText(r, err))
+		return
+	}
+	ttl := 24 * time.Hour
+	label := "24 hours"
+	if r.FormValue("ttl") == "0" {
+		ttl, label = 0, "Permanent"
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if why := s.whyNot(ctx, c, ip, false); why != "" {
+		flashRedirect(w, r, back, "", tr(r, "%s cannot be blocked: %s", ip, tr(r, why)))
+		return
+	}
+	if isPrivate(ip) {
+		flashRedirect(w, r, back, "", tr(r, "%s is a private address, most likely a proxy in front of SafeLine. Block it from its address page if you mean it", ip))
+		return
+	}
+	reason := "one-click block"
+	if err := s.blocklist(c).BlockMany(ctx, []string{ip}, blocklist.Meta{By: rc.User.Name, Reason: reason, Source: "manual"}, ttl); err != nil {
+		s.audit.Log(rc.User.Name, clientIP(r), "waf.block.failed", c.ID+" "+ip+" — "+err.Error())
+		flashRedirect(w, r, back, "", tr(r, "SafeLine rejected the block: %s", err))
+		return
+	}
+	s.audit.Log(rc.User.Name, clientIP(r), "waf.block", fmt.Sprintf("%s %s for %s: %s", c.ID, ip, label, reason))
+	flashRedirect(w, r, back, tr(r, "Blocked %s (%s)", ip, tr(r, label)), "")
 }
 
 func (s *Server) wafUnblock(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
@@ -181,7 +260,7 @@ func (s *Server) wafUnblock(w http.ResponseWriter, r *http.Request, rc *reqCtx) 
 		return
 	}
 	s.audit.Log(rc.User.Name, clientIP(r), "waf.unblock", c.ID+" "+ip)
-	flashRedirect(w, r, "/waf?instance="+url.QueryEscape(c.ID), tr(r, "Unblocked %s", ip), "")
+	flashRedirect(w, r, backTo(r, "/waf?instance="+url.QueryEscape(c.ID)), tr(r, "Unblocked %s", ip), "")
 }
 
 func (s *Server) wafSiteMode(w http.ResponseWriter, r *http.Request, rc *reqCtx) {

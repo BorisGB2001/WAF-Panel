@@ -21,6 +21,8 @@ web:
   data_dir: /var/lib/wafpanel # users, session key, rules saved in the UI, alert history, audit log
   session_ttl: 12h
   # plain_http: true # only with listen on 127.0.0.1 (local development, reverse proxy)
+  # boris.gb 2026-11-05 13:02 - allow_from: only these sources may open the panel (empty: everyone)
+  # allow_from: [127.0.0.1, 192.0.2.0/24]
 
 instances:
   - id: prod
@@ -123,6 +125,12 @@ siem:
     # ca_file: secrets/siem-ca.pem # for network: tls
 
 # boris.gb 2026-10-30 18:15 - traffic analytics settings
+# boris.gb 2026-11-05 13:02 - block.protected: addresses the panel never blocks, by hand, by the auto-ban or by a trap
+block:
+  # Your office, VPN and monitoring, and a front proxy if there is one.
+  # Private networks are never blocked automatically anyway.
+  protected: [192.0.2.0/24]
+
 analytics:
   # Copied by deploy/install.sh from SafeLine's detector image.
   geoip_db: /var/lib/wafpanel/GeoLite2-City.mmdb

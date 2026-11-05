@@ -32,6 +32,19 @@ func TestExampleConfig(t *testing.T) {
 	if c.SIEM[0].QueueSize != 10000 || c.Channels[1].Email.Password != "x" {
 		t.Fatal("defaults not applied")
 	}
+	if len(c.Block.ProtectedNets) != 1 || c.Block.ProtectedNets[0].String() != "192.0.2.0/24" {
+		t.Fatalf("block.protected %v", c.Block.ProtectedNets)
+	}
+}
+
+func TestPrefixes(t *testing.T) {
+	ps, err := prefixes([]string{"192.0.2.7", "198.51.100.9/24", " 2001:db8::1 "})
+	if err != nil || len(ps) != 3 || ps[0].String() != "192.0.2.7/32" || ps[1].String() != "198.51.100.0/24" || ps[2].Bits() != 128 {
+		t.Fatal(ps, err)
+	}
+	if _, err := prefixes([]string{"office"}); err == nil {
+		t.Fatal("a name accepted as a network")
+	}
 }
 
 func TestRejectsUnknownChannel(t *testing.T) {

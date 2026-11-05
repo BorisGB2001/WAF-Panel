@@ -198,7 +198,7 @@ form.inline { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
 form.inline select { padding: 3px 6px; font-size: 12px; }
 .actions { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; }
 .card form, form.card { display: flex; flex-direction: column; gap: 12px; }
-form.inline { flex-direction: row; }
+form.inline, .card form.inline { display: inline-flex; flex-direction: row; }
 
 .filters { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
 .filters .actions { margin: 0; }
@@ -418,3 +418,48 @@ table.endpoints td.mono { word-break: break-all; }
 .sharecell { min-width: 120px; }
 .sharecell i { display: inline-block; vertical-align: middle; height: 6px; width: calc(var(--w) * 0.8px); max-width: 80px; background: var(--series-1); border-radius: 3px; margin-right: 6px; }
 .card h3 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 8px; }
+
+/* Search in the sidebar; the menu scrolls when it does not fit. */
+.side nav { overflow-y: auto; min-height: 0; }
+.navsearch input { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+  color: var(--side-on); border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 13px; }
+.navsearch input::placeholder { color: var(--side-fg); opacity: .6; }
+.navsearch input:focus { outline: none; border-color: var(--accent); }
+
+/* Addresses: country code, blocked and allowed. */
+small.cc { color: var(--muted); font-size: 11px; white-space: nowrap; }
+a.blockedip, tr.isblocked td.mono a { color: var(--bad); }
+a.allowedip { color: var(--good); }
+.btn.xs { padding: 1px 7px; font-size: 11px; line-height: 18px; }
+.banbtns { display: inline-flex; gap: 4px; }
+.banbtns form { display: inline; }
+
+/* Address page. */
+.iphead .ipname { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mono.big { font-size: 22px; font-weight: 700; }
+.ipactions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ipactions form.inline { display: inline-flex; gap: 6px; align-items: center; }
+.blockinline input[name=reason] { min-width: 220px; }
+b.smallnum { font-size: 16px; }
+label.check { display: flex; flex-direction: row; align-items: center; gap: 6px; font-weight: normal; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; margin: 6px 0 10px; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 12px; margin: 10px 0; }
+legend { color: var(--muted); font-size: 12px; padding: 0 4px; }
+.row2, .row3 { display: grid; gap: 12px; }
+.row2 { grid-template-columns: 1fr 1fr; }
+.row3 { grid-template-columns: 1fr 1fr 1fr; }
+.autobanform .card { display: flex; flex-direction: column; gap: 10px; }
+.autobanform .span2 { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 900px) { .row3 { grid-template-columns: 1fr; } }
+
+/* Resizable table columns (see charts.js). */
+table.colfixed { table-layout: fixed; }
+table.colfixed th, table.colfixed td { overflow: hidden; text-overflow: ellipsis; }
+th { position: relative; }
+.colgrip { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 1; }
+.colgrip:hover, body.colresizing .colgrip { background: var(--accent); opacity: .35; }
+body.colresizing { cursor: col-resize; user-select: none; }
+table.attacks td.url { min-width: 220px; }
+.trapform { display: grid !important; grid-template-columns: 1fr 200px 1fr 130px auto auto; gap: 12px; align-items: end; }
+.trapform .actions { margin: 0; }
+@media (max-width: 1100px) { .trapform { grid-template-columns: 1fr 1fr; } }

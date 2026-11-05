@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,17 @@ type Config struct {
 	Rules     []Rule     `yaml:"rules"`
 	SIEM      []SIEM     `yaml:"siem"`
 	Analytics Analytics  `yaml:"analytics"`
+	Block     Block      `yaml:"block"`
+}
+
+// Block limits what the panel may block.
+type Block struct {
+	// Protected addresses and networks are never blocked, by hand or
+	// automatically: your office, VPN, monitoring, a front proxy. Private,
+	// loopback and link-local ranges are never blocked automatically.
+	Protected []string `yaml:"protected"`
+
+	ProtectedNets []netip.Prefix `yaml:"-"`
 }
 
 // Analytics builds traffic statistics from the logs of SafeLine instances
@@ -84,6 +96,11 @@ type Web struct {
 	// PlainHTTP serves without TLS. Only allowed on a loopback listen
 	// address: for local development or behind a reverse proxy on the host.
 	PlainHTTP bool `yaml:"plain_http"`
+	// AllowFrom lets in only these addresses and networks; empty allows
+	// every source.
+	AllowFrom []string `yaml:"allow_from"`
+
+	AllowNets []netip.Prefix `yaml:"-"`
 }
 
 // Instance is one SafeLine installation reached over its OpenAPI.
@@ -220,6 +237,24 @@ func Load(path string) (*Config, error) {
 	return &c, nil
 }
 
+// prefixes parses addresses and networks; an address is a /32 or /128.
+func prefixes(list []string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, s := range list {
+		s = strings.TrimSpace(s)
+		if a, err := netip.ParseAddr(s); err == nil {
+			out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
+			continue
+		}
+		p, err := netip.ParsePrefix(s)
+		if err != nil {
+			return nil, fmt.Errorf("%q is neither an address nor a network", s)
+		}
+		out = append(out, p.Masked())
+	}
+	return out, nil
+}
+
 func (c *Config) finish(dir string) error {
 	abs := func(p string) string {
 		if p == "" || filepath.IsAbs(p) {
@@ -264,6 +299,12 @@ func (c *Config) finish(dir string) error {
 		if ip := net.ParseIP(host); err != nil || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
 			return fmt.Errorf("web: plain_http is only allowed on a loopback listen address")
 		}
+	}
+	if c.Web.AllowNets, err = prefixes(c.Web.AllowFrom); err != nil {
+		return fmt.Errorf("web.allow_from: %w", err)
+	}
+	if c.Block.ProtectedNets, err = prefixes(c.Block.Protected); err != nil {
+		return fmt.Errorf("block.protected: %w", err)
 	}
 	if c.Web.SessionTTL == 0 {
 		c.Web.SessionTTL = Duration(12 * time.Hour)

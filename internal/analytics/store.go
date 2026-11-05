@@ -53,7 +53,10 @@ type Bucket struct {
 	Clients   map[string]int64 `json:"clients,omitempty"`
 	Bots      map[string]int64 `json:"bots,omitempty"`
 	Referrers map[string]int64 `json:"referrers,omitempty"`
-	Paths     map[string]*Stat `json:"paths,omitempty"` // "GET /api/:id"
+	Devices   map[string]int64 `json:"devices,omitempty"`   // Desktop, Phone, Tablet, Bot, Script
+	Sources   map[string]int64 `json:"sources,omitempty"`   // Search engines, Social networks, Other sites, Direct
+	NotFound  map[string]int64 `json:"not_found,omitempty"` // pages (not assets) answered 404
+	Paths     map[string]*Stat `json:"paths,omitempty"`     // "GET /api/:id"
 	IPs       map[string]*Stat `json:"ips,omitempty"`
 	UpErr     map[string]int64 `json:"uperr,omitempty"`    // kind
 	UpErrUp   map[string]int64 `json:"uperr_up,omitempty"` // upstream address
@@ -114,8 +117,18 @@ func (b *Bucket) addAccess(a Access, place Place, c Client) {
 	if c.Bot != "" {
 		inc(&b.Bots, c.Bot, 1)
 	}
-	if r := refHost(a.Referer, a.Host); r != "" {
+	r := refHost(a.Referer, a.Host)
+	if r != "" {
 		inc(&b.Referrers, r, 1)
+	}
+	inc(&b.Devices, Device(a.UA, c), 1)
+	// Where visitors come from: page requests of people only, with an
+	// outside referrer or none (the site's own pages do not count).
+	if c.Bot == "" && a.Method == "GET" && !IsAsset(a.Path) && (a.Referer == "" || r != "") {
+		inc(&b.Sources, Source(r), 1)
+	}
+	if a.Status == 404 && !IsAsset(a.Path) {
+		inc(&b.NotFound, NormalizePath(a.Path), 1)
 	}
 	incStat(&b.Paths, a.Method+" "+NormalizePath(a.Path), s)
 	incStat(&b.IPs, a.IP, s)
@@ -161,6 +174,7 @@ func (b *Bucket) merge(o *Bucket) {
 		{&b.Status, &o.Status}, {&b.Methods, &o.Methods}, {&b.Hosts, &o.Hosts}, {&b.Countries, &o.Countries},
 		{&b.Cities, &o.Cities}, {&b.OS, &o.OS}, {&b.Clients, &o.Clients}, {&b.Bots, &o.Bots},
 		{&b.Referrers, &o.Referrers}, {&b.UpErr, &o.UpErr}, {&b.UpErrUp, &o.UpErrUp},
+		{&b.Devices, &o.Devices}, {&b.Sources, &o.Sources}, {&b.NotFound, &o.NotFound},
 	} {
 		for k, v := range *p.src {
 			inc(p.dst, k, v)
@@ -216,6 +230,7 @@ func (b *Bucket) trim() {
 	b.Status, b.Methods, b.Hosts, b.Countries = trim(b.Status, d), trim(b.Methods, d), trim(b.Hosts, d), trim(b.Countries, d)
 	b.Cities, b.OS, b.Clients, b.Bots = trim(b.Cities, caps["cities"]), trim(b.OS, d), trim(b.Clients, caps["clients"]), trim(b.Bots, d)
 	b.Referrers, b.UpErr, b.UpErrUp = trim(b.Referrers, caps["referrers"]), trim(b.UpErr, d), trim(b.UpErrUp, d)
+	b.Devices, b.Sources, b.NotFound = trim(b.Devices, d), trim(b.Sources, d), trim(b.NotFound, caps["paths"])
 	b.Paths, b.IPs = trimStat(b.Paths, caps["paths"]), trimStat(b.IPs, caps["ips"])
 }
 

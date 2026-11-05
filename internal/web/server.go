@@ -26,6 +26,7 @@ import (
 	"wafpanel/internal/analytics"
 
 	"wafpanel/internal/auth"
+	"wafpanel/internal/autoban"
 	"wafpanel/internal/blocklist"
 	"wafpanel/internal/config"
 	"wafpanel/internal/history"
@@ -57,6 +58,13 @@ type Server struct {
 	RuleFile string
 	// Analytics collects traffic from the logs of instances on this host.
 	Analytics map[string]*analytics.Collector
+	// Geo places addresses on the map; nil shows no countries.
+	Geo *analytics.Geo
+	// Autoban decides on its own whom to block; its Decisions are applied
+	// by StartAutoban. DryRun (the -dry-run flag) applies none of them.
+	Autoban   *autoban.Engine
+	Decisions <-chan autoban.Decision
+	DryRun    bool
 
 	users    *auth.Users
 	sessions *auth.Sessions
@@ -68,6 +76,8 @@ type Server struct {
 	rules      []config.Rule
 	dash       map[string]*dashCache
 	blocklists map[string]*blocklist.Manager
+	allowlists map[string]*blocklist.Manager
+	analysis   map[string]*analysisCache
 }
 
 // Open prepares users, sessions and audit in the data dir. When no user
@@ -115,7 +125,7 @@ func (s *Server) parseTemplates() error {
 			if name == "layout.html" {
 				continue
 			}
-			t, err := template.New(name).Funcs(funcs).Funcs(langFuncs(lang)).ParseFS(assets, "templates/layout.html", f)
+			t, err := template.New(name).Funcs(funcs).Funcs(langFuncs(lang)).Funcs(template.FuncMap{"cc": countryFunc(s.Geo, lang)}).ParseFS(assets, "templates/layout.html", f)
 			if err != nil {
 				return fmt.Errorf("template %s: %w", name, err)
 			}
@@ -151,6 +161,11 @@ func (s *Server) Handler() http.Handler {
 	view("GET /apps", s.appsPage)
 	view("GET /policies", s.policiesPage)
 	view("GET /certs", s.certsPage)
+	view("GET /ip/{ip...}", s.ipPage)
+	view("GET /search", s.search)
+	view("GET /analysis", s.analysisPage)
+	view("GET /autoban", s.autobanPage)
+	view("GET /traps", s.trapsPage)
 	view("GET /account", s.accountPage)
 	view("POST /account/password", s.accountPassword)
 
@@ -180,9 +195,21 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /policies/{instance}/{id}/delete", s.policyDelete)
 	admin("POST /waf/{instance}/block", s.wafBlock)
 	admin("POST /waf/{instance}/unblock", s.wafUnblock)
+	admin("POST /waf/{instance}/ban", s.wafBan)
+	admin("POST /waf/{instance}/expiry", s.blockExpiry)
+	admin("POST /waf/{instance}/allow", s.allowAdd)
+	admin("POST /waf/{instance}/allow/remove", s.allowRemove)
+	admin("GET /massban", s.massBanPage)
+	admin("POST /massban", s.massBan)
+	admin("POST /autoban", s.autobanSave)
+	admin("POST /traps", s.trapAdd)
+	admin("POST /traps/defaults", s.trapDefaults)
+	admin("POST /traps/sync", s.trapSync)
+	admin("POST /traps/{id}/delete", s.trapDelete)
+	admin("POST /traps/{id}/{what}", s.trapChange)
 	admin("POST /waf/{instance}/sites/{id}/mode", s.wafSiteMode)
 
-	return securityHeaders(mux)
+	return s.allowFrom(securityHeaders(mux))
 }
 
 // ListenAndServe serves HTTPS until ctx ends.

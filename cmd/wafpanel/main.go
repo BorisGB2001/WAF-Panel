@@ -22,6 +22,7 @@ import (
 
 	"wafpanel/internal/analytics"
 	"wafpanel/internal/auth"
+	"wafpanel/internal/autoban"
 	"wafpanel/internal/collector"
 	"wafpanel/internal/config"
 	"wafpanel/internal/history"
@@ -134,6 +135,27 @@ func run(cfgPath string, check bool, testChannel string, dryRun bool, log *slog.
 
 	events := make(chan safeline.Event, 1000)
 	p := &pipeline.Pipeline{Engine: rules.New(activeRules), Channels: channels, SIEM: targets, History: hist, Log: log, DryRun: dryRun}
+
+	// The auto-ban reads every event and access line; the web panel, which
+	// owns the blocklists, applies its decisions.
+	var ab *autoban.Engine
+	decisions := make(chan autoban.Decision, 1000)
+	queue := func(d *autoban.Decision) {
+		if d == nil {
+			return
+		}
+		select {
+		case decisions <- *d:
+		default:
+			log.Warn("auto-ban: queue full, decision dropped", "ip", d.IP)
+		}
+	}
+	if cfg.Web.Listen != "" {
+		if ab, err = autoban.Open(filepath.Join(cfg.Web.DataDir, "autoban.json")); err != nil {
+			return fmt.Errorf("autoban: %w", err)
+		}
+		p.Tap = func(ev safeline.Event) { queue(ab.Process(web.HitOf(ev))) }
+	}
 	go p.Run(ctx, events)
 
 	var maxInterval time.Duration
@@ -164,6 +186,10 @@ func run(cfgPath string, check bool, testChannel string, dryRun bool, log *slog.
 			SiteOf:   siteResolver(ctx, clients[i]),
 			Backfill: *cfg.Analytics.Backfill,
 		}
+		if ab != nil {
+			id := in.ID
+			a.OnAccess = func(x analytics.Access, cl analytics.Client) { queue(ab.Access(web.RequestOf(id, x, cl))) }
+		}
 		tracking[in.ID] = a
 		go a.Run(ctx)
 	}
@@ -175,13 +201,15 @@ func run(cfgPath string, check bool, testChannel string, dryRun bool, log *slog.
 	webErr := make(chan error, 1)
 	if cfg.Web.Listen != "" {
 		ws := &web.Server{Cfg: cfg, Clients: clients, Senders: senders, Stats: st, History: hist,
-			Rules: p, Log: log, Version: version, RuleFile: ruleFile, Analytics: tracking}
+			Rules: p, Log: log, Version: version, RuleFile: ruleFile, Analytics: tracking, Geo: geo,
+			Autoban: ab, Decisions: decisions, DryRun: dryRun}
 		if err := ws.Open(activeRules); err != nil {
 			return fmt.Errorf("web: %w", err)
 		}
 		if !dryRun {
 			ws.StartExpiry(ctx)
 		}
+		ws.StartAutoban(ctx)
 		go func() { webErr <- ws.ListenAndServe(ctx) }()
 	}
 

@@ -1,0 +1,61 @@
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$c := $d.Instance}}
+<form class="filters card" method="get" action="/analysis">
+  {{if gt (len $d.Instances) 1}}<label>WAF<select name="instance">{{range $d.Instances}}<option value="{{.ID}}" {{if eq .ID $c.ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>{{else}}<input type="hidden" name="instance" value="{{$c.ID}}">{{end}}
+  <div class="seg">{{range $d.Periods}}<button name="period" value="{{.Key}}" class="{{if eq .Key $d.Period}}on{{end}}">{{t .Label}}</button>{{end}}</div>
+  <span class="muted small">{{t "%d of %d record(s) analysed" $v.Read $v.Total}}</span>
+</form>
+
+<section class="card">
+  <div class="cardhead"><h2>{{t "Possible false positives"}}</h2></div>
+  <p class="muted small">{{t "The same rule on the same site and path, hit by many ordinary visitors: addresses that touched at most three paths in the period. A scanner tries hundreds of URLs and drops out; a form the WAF breaks is hit by everyone who uses it. Review these before blocking anyone, and allow the path in Allow & Deny if it is legitimate."}}</p>
+  {{if $v.FP}}
+  <div class="scroll"><table>
+    <thead><tr><th>{{t "Site and path"}}</th><th>{{t "Rule"}}</th><th class="num">{{t "Visitors"}}</th><th class="num">{{t "Addresses"}}</th><th class="num">{{t "Requests"}}</th><th></th></tr></thead>
+    <tbody>{{range $v.FP}}<tr>
+      <td class="url"><span class="muted">{{.Host}}</span>{{cut .Path 80}}</td>
+      <td>{{.Label}}<br><small class="atype">{{atype .Type}}</small></td>
+      <td class="num"><b>{{.Focused}}</b></td><td class="num">{{.IPs}}</td><td class="num">{{.N}}</td>
+      <td>{{if .Scanner}}<span class="badge" title="{{t "The path or host looks like a scanner's"}}">{{t "scanner-like"}}</span>{{end}} <a class="small" href="/attacks/{{$c.ID}}/{{.Sample}}">{{t "example"}}</a></td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<p class="muted">{{t "None found: no rule was hit by three or more ordinary visitors on one path."}}</p>{{end}}
+</section>
+
+<section class="card">
+  <div class="cardhead"><h2>{{t "Top attackers"}}</h2></div>
+  {{if $v.IPs}}
+  <div class="scroll"><table>
+    <thead><tr><th>{{t "Address"}}</th><th class="num">{{t "Attacks"}}</th><th class="num">{{t "Blocked"}}</th><th class="num">{{t "Paths"}}</th><th class="num">{{t "Sites"}}</th><th>{{t "Types"}}</th><th>{{t "Last seen"}}</th>{{if .IsAdmin}}<th>{{t "Block"}}</th>{{end}}</tr></thead>
+    <tbody>{{range $v.IPs}}<tr class="{{if .Blocked}}isblocked{{end}}">
+      <td class="mono"><a href="/ip/{{.IP}}">{{.IP}}</a>{{cc .IP}}</td>
+      <td class="num">{{.N}}</td><td class="num">{{.Denied}}</td><td class="num">{{.Paths}}</td><td class="num">{{.Sites}}</td>
+      <td class="small">{{range $i, $t := .Types}}{{if $i}}, {{end}}{{atypeName $t}}{{end}}</td>
+      <td class="nowrap">{{ago .Last}}</td>
+      {{if $.IsAdmin}}<td>{{if .Blocked}}<span class="badge bad">⛔ {{t "blocked"}}</span>{{else if .Why}}<span class="badge" title="{{t .Why}}">{{t .Why}}</span>{{else}}{{template "banbtns" (dict "I" $c.ID "IP" .IP "CSRF" $.CSRF "Back" $d.Back)}}{{end}}</td>{{end}}
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<p class="muted">{{t "No attacks in the period."}}</p>{{end}}
+</section>
+
+<div class="grid2">
+<section class="card">
+  <h2>{{t "Top rules"}}</h2>
+  <table class="compact">{{range $v.Rules}}<tr><td>{{.Label}}<br><small class="muted">{{atype .Type}}</small></td><td class="num">{{.N}}</td><td class="num muted">{{t "%d addr." .IPs}}</td>
+    {{if $.IsAdmin}}<td><a class="small" href="/massban?instance={{$c.ID}}&amp;by=rule&amp;value={{urlquery .Key}}&amp;period={{$d.Period}}">{{t "ban all"}}</a></td>{{end}}</tr>{{end}}</table>
+</section>
+<section class="card">
+  <h2>{{t "Top paths"}}</h2>
+  <table class="compact">{{range $v.Paths}}<tr><td class="url"><span class="muted">{{.Host}}</span>{{cut .Label 70}}</td><td class="num">{{.N}}</td><td class="num muted">{{t "%d addr." .IPs}}</td>
+    {{if $.IsAdmin}}<td><a class="small" href="/massban?instance={{$c.ID}}&amp;by=path&amp;value={{urlquery .Label}}&amp;host={{urlquery .Host}}&amp;period={{$d.Period}}">{{t "ban all"}}</a> · <a class="small" href="/traps?path={{urlquery .Label}}">{{t "trap"}}</a></td>{{end}}</tr>{{end}}</table>
+</section>
+<section class="card">
+  <h2>{{t "Attack types"}}</h2>
+  <table class="compact">{{range $v.Types}}<tr><td>{{atypeName .Key}}</td><td class="num">{{.Count}}</td></tr>{{end}}</table>
+</section>
+<section class="card">
+  <h2>{{t "Countries"}}</h2>
+  <table class="compact">{{range $v.Countries}}<tr><td>{{.Key}}</td><td class="num">{{.Count}}</td></tr>{{end}}</table>
+</section>
+</div>
+{{end}}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"html/template"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -70,6 +71,9 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, rc *reqCtx, name
 
 var funcs = template.FuncMap{
 	"hasSuffix":  strings.HasSuffix,
+	"hasPrefix":  strings.HasPrefix,
+	"has":        func(list []int, v int) bool { return slices.Contains(list, v) },
+	"trimPrefix": strings.TrimPrefix,
 	"trimSuffix": strings.TrimSuffix,
 	"num":        compact,
 	"bytes":      humanBytes,
@@ -87,6 +91,15 @@ var funcs = template.FuncMap{
 		return a * 100 / b
 	},
 	"add": func(a, b int) int { return a + b },
+	// dict builds the argument of a shared template: dict "k1" v1 "k2" v2.
+	"dict": func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			k, _ := kv[i].(string)
+			m[k] = kv[i+1]
+		}
+		return m
+	},
 	"sub": func(a, b int) int { return a - b },
 	"cut": func(s string, n int) string {
 		r := []rune(s)
@@ -190,6 +203,15 @@ func langFuncs(lang string) template.FuncMap {
 		"t":         func(s string, args ...any) string { return i18n.T(lang, s, args...) },
 		"atype":     func(t int) string { return i18n.T(lang, safeline.AttackTypeCode(t)) },
 		"atypeName": func(code string) string { return i18n.T(lang, code) },
+		// term is a block duration in words: "7 days", "Permanent".
+		"term": func(d time.Duration) string {
+			for _, o := range durationOptions {
+				if o.D == d {
+					return i18n.T(lang, o.Label)
+				}
+			}
+			return d.String()
+		},
 		"dt": func(t time.Time) string {
 			if t.IsZero() {
 				return "—"

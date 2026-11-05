@@ -51,30 +51,70 @@
   </div>
   <p class="muted small">{{t "The panel keeps the SafeLine IP group “WAF Panel blocklist” and a deny rule for it. Expired blocks are removed automatically. Addresses added to the group in the SafeLine console are marked “from console”."}}</p>
   {{with $d.Block}}{{if .Entries}}
-  <table>
+  <div class="scroll"><table>
     <thead><tr><th>{{t "IP / subnet"}}</th><th>{{t "Reason"}}</th><th>{{t "By"}}</th><th>{{t "When"}}</th><th>{{t "Until"}}</th>{{if $.IsAdmin}}<th></th>{{end}}</tr></thead>
     <tbody>
     {{range .Entries}}<tr>
-      <td class="mono"><a href="/attacks?instance={{$c.ID}}&amp;period=30d&amp;ip={{.IP}}">{{.IP}}</a></td>
-      <td>{{if .External}}<span class="muted">{{t "from console"}}</span>{{else}}{{.Reason}}{{end}}</td>
+      <td class="mono nowrap"><a href="/ip/{{.IP}}" class="blockedip">{{.IP}}</a>{{cc .IP}}</td>
+      <td>{{if .External}}<span class="muted">{{t "from console"}}</span>{{else}}{{.Reason}}{{if .Rule}}<br><small class="muted">{{template "source" .Source}} · {{.Rule}}</small>{{else if and .Source (ne .Source "manual")}}<br><small class="muted">{{template "source" .Source}}</small>{{end}}{{end}}</td>
       <td>{{.By}}</td>
       <td class="nowrap">{{if not .At.IsZero}}{{dt .At}}{{end}}</td>
       <td class="nowrap">{{if .External}}—{{else if .Expires.IsZero}}{{t "permanent"}}{{else}}{{dt .Expires}}{{end}}</td>
-      {{if $.IsAdmin}}<td><form method="post" action="/waf/{{$c.ID}}/unblock" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}"><button class="btn sm">{{t "Unblock"}}</button></form></td>{{end}}
+      {{if $.IsAdmin}}<td class="nowrap">
+        <form method="post" action="/waf/{{$c.ID}}/unblock" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}"><button class="btn sm">{{t "Unblock"}}</button></form>
+        <details class="inline"><summary class="btn sm">{{t "More…"}}</summary>
+          <div class="stack">
+          <form method="post" action="/waf/{{$c.ID}}/expiry" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}">
+            <select name="ttl">{{range $d.TTLs}}<option value="{{.Key}}">{{t .Label}}</option>{{end}}</select> <button class="btn sm">{{t "Change the term"}}</button></form>
+          <form method="post" action="/waf/{{$c.ID}}/allow" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}"><input type="hidden" name="reason" value="{{t "moved from the blocklist"}}"><button class="btn sm">{{t "Move to the allow list"}}</button></form>
+          </div>
+        </details>
+      </td>{{end}}
     </tr>{{end}}
     </tbody>
-  </table>
+  </table></div>
   {{else}}<p class="muted">{{t "No blocked addresses."}}</p>{{end}}{{end}}
 
   {{if .IsAdmin}}
-  <form method="post" action="/waf/{{$c.ID}}/block" class="blockform">
+  <form method="post" action="/waf/{{$c.ID}}/block" class="blockform" id="blockform-{{$c.ID}}">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     <label>{{t "IP or subnet"}}<input name="ip" required value="{{$d.Prefill}}" placeholder="203.0.113.5 / 203.0.113.0/24"></label>
     <label>{{t "Duration"}}<select name="ttl">{{range $d.TTLs}}<option value="{{.Key}}" {{if eq .Key "24h"}}selected{{end}}>{{t .Label}}</option>{{end}}</select></label>
     <label class="grow">{{t "Reason"}}<input name="reason" required placeholder="{{t "scanner, password brute force, …"}}"></label>
     <div class="actions"><button class="btn danger">{{t "Block"}}</button></div>
   </form>
-  <p class="muted small">{{t "You cannot block your own address (%s), the WAF itself, loopback, or subnets wider than /16 (IPv6: /48)." $d.MyIP}}</p>
+  <label class="check small"><input type="checkbox" name="private" value="1" form="blockform-{{$c.ID}}"> {{t "The address is private and I know it is not the proxy every visitor comes through"}}</label>
+  <p class="muted small">{{t "You cannot block your own address (%s), the WAF itself, protected or allowed addresses, loopback, or subnets wider than /16 (IPv6: /48)." $d.MyIP}}</p>
+  {{end}}
+</section>
+
+<section class="card" id="allow">
+  <div class="cardhead">
+    <h2>{{t "Allow list"}}</h2>
+    {{with $d.Allow}}{{if .PolicyID}}
+      <span class="badge {{if .PolicyEnabled}}good{{else}}bad{{end}}">{{if .PolicyEnabled}}✓ {{t "rule #%d enabled" .PolicyID}}{{else}}✕ {{t "rule #%d disabled" .PolicyID}}{{end}}</span>
+    {{else}}<span class="badge">{{t "created on the first address"}}</span>{{end}}{{end}}
+  </div>
+  <p class="muted small">{{t "Trusted addresses: office, VPN, monitoring, partners. SafeLine lets them through without checks (the SafeLine IP group “WAF Panel allow list” and an allow rule for it), and the panel never blocks them, by hand or automatically. Adding an address lifts its block."}}</p>
+  {{with $d.Allow}}{{if .Entries}}
+  <div class="scroll"><table>
+    <thead><tr><th>{{t "IP / subnet"}}</th><th>{{t "Reason"}}</th><th>{{t "By"}}</th><th>{{t "When"}}</th>{{if $.IsAdmin}}<th></th>{{end}}</tr></thead>
+    <tbody>{{range .Entries}}<tr>
+      <td class="mono nowrap"><a href="/ip/{{.IP}}" class="allowedip">{{.IP}}</a>{{cc .IP}}</td>
+      <td>{{if .External}}<span class="muted">{{t "from console"}}</span>{{else}}{{.Reason}}{{end}}</td>
+      <td>{{.By}}</td>
+      <td class="nowrap">{{if not .At.IsZero}}{{dt .At}}{{end}}</td>
+      {{if $.IsAdmin}}<td><form method="post" action="/waf/{{$c.ID}}/allow/remove" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}"><button class="btn sm">{{t "Remove"}}</button></form></td>{{end}}
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<p class="muted">{{t "The allow list is empty."}}</p>{{end}}{{end}}
+  {{if .IsAdmin}}
+  <form method="post" action="/waf/{{$c.ID}}/allow" class="blockform">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>{{t "IP or subnet"}}<input name="ip" required placeholder="198.51.100.0/24"></label>
+    <label class="grow">{{t "Reason"}}<input name="reason" required placeholder="{{t "office, monitoring, partner…"}}"></label>
+    <div class="actions"><button class="btn primary">{{t "Allow"}}</button></div>
+  </form>
   {{end}}
 </section>
 
@@ -100,3 +140,5 @@
 {{end}}
 
 {{define "modebadge"}}{{if eq . 0}}<span class="badge good">● {{t "Defense"}}</span>{{else if eq . 2}}<span class="badge warn">◐ {{t "Monitoring"}}</span>{{else}}<span class="badge bad">✕ {{t "Offline"}}</span>{{end}}{{end}}
+
+{{define "source"}}{{if eq . "autoban"}}{{t "auto-ban"}}{{else if eq . "access"}}{{t "auto-ban from the access logs"}}{{else if eq . "trap"}}{{t "trap"}}{{else if eq . "massban"}}{{t "ban by attack"}}{{else}}{{t "by hand"}}{{end}}{{end}}

@@ -17,10 +17,7 @@ import (
 	"wafpanel/internal/safeline"
 )
 
-var trafficPeriods = []struct {
-	Key, Label string
-	D          time.Duration
-}{
+var trafficPeriods = []periodOption{
 	{"24h", "24 hours", 24 * time.Hour}, {"7d", "7 days", 7 * 24 * time.Hour},
 	{"30d", "30 days", 30 * 24 * time.Hour}, {"90d", "90 days", 90 * 24 * time.Hour},
 }
@@ -149,11 +146,14 @@ type trafficView struct {
 	OSSlices        []slice
 	ClientDonut     template.HTML
 	ClientSlices    []slice
+	DeviceDonut     template.HTML
+	DeviceSlices    []slice
 
 	Countries, Cities, Clients, Bots, Referrers, Hosts []row
 	Statuses, Methods                                  []row
 	Paths, ErrPaths, IPs                               []row
 	UpKinds, Upstreams                                 []row
+	Sources, NotFound                                  []row
 
 	NoLog      []string // sites without an access log
 	HiddenIPs  bool     // clients are behind a proxy: one private address dominates
@@ -162,7 +162,7 @@ type trafficView struct {
 }
 
 // traffic builds the log-based part of the statistics page.
-func (s *Server) traffic(ctx context.Context, r *http.Request, c *safeline.Client) trafficView {
+func (s *Server) traffic(ctx context.Context, r *http.Request, c *safeline.Client, period string) trafficView {
 	v := trafficView{Period: "24h", Periods: trafficPeriods}
 	col := s.Analytics[c.ID]
 	if col == nil {
@@ -172,7 +172,7 @@ func (s *Server) traffic(ctx context.Context, r *http.Request, c *safeline.Clien
 	v.Status = col.Status()
 	d := 24 * time.Hour
 	for _, p := range trafficPeriods {
-		if p.Key == r.URL.Query().Get("period") {
+		if p.Key == period {
 			v.Period, d = p.Key, p.D
 		}
 	}
@@ -262,6 +262,14 @@ func (s *Server) traffic(ctx context.Context, r *http.Request, c *safeline.Clien
 	v.OSDonut = donut(v.OSSlices, tr(r, "requests"))
 	v.ClientSlices = slicesOf(families)
 	v.ClientDonut = donut(v.ClientSlices, tr(r, "requests"))
+	v.DeviceSlices = slicesOf(q.Devices)
+	v.DeviceDonut = donut(v.DeviceSlices, tr(r, "requests"))
+	var pages int64
+	for _, n := range q.Sources {
+		pages += n
+	}
+	v.Sources = rowsOf(q.Sources, pages, 6, func(k string) (string, string) { return tr(r, k), "" })
+	v.NotFound = rowsOf(q.NotFound, q.Status["404"], 15, nil)
 
 	v.Paths = statRows(q.Paths, q.N, 25, func(s *analytics.Stat) int64 { return s.N })
 	v.ErrPaths = statRows(q.Paths, q.N, 15, func(s *analytics.Stat) int64 { return s.E4 + s.E5 })

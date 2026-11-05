@@ -1,6 +1,8 @@
 // Package blocklist blocks source IPs on a SafeLine instance through one IP
 // group and one deny rule that the panel owns. SafeLine keeps the list
-// itself; the panel keeps who blocked what, why and until when.
+// itself; the panel keeps who blocked what, why and until when. The same
+// manager with Allow set keeps the allow list: a second group and an allow
+// rule for addresses that are never blocked.
 package blocklist
 
 import (
@@ -23,6 +25,9 @@ const (
 	// GroupComment and PolicyName identify the objects the panel owns.
 	GroupComment = "WAF Panel blocklist"
 	PolicyName   = "WAF Panel: IP blocklist"
+	// AllowComment and AllowPolicyName are the allow list's.
+	AllowComment    = "WAF Panel allow list"
+	AllowPolicyName = "WAF Panel: allow list"
 )
 
 // API is the part of safeline.Client the manager needs.
@@ -33,7 +38,7 @@ type API interface {
 	UpdateIPGroup(ctx context.Context, g safeline.IPGroup) error
 	AppendIPGroup(ctx context.Context, id int, ips []string) error
 	Policies(ctx context.Context) ([]safeline.Policy, error)
-	CreateDenyGroupPolicy(ctx context.Context, name string, groupID int) error
+	CreateGroupPolicy(ctx context.Context, name string, groupID, action int) error
 	SetPolicyEnabled(ctx context.Context, id int, enabled bool) error
 }
 
@@ -42,6 +47,10 @@ type Meta struct {
 	Reason  string    `json:"reason"`
 	At      time.Time `json:"at"`
 	Expires time.Time `json:"expires,omitempty"`
+	// Source is "manual", "autoban", "access", "trap" or "massban".
+	Source string `json:"source,omitempty"`
+	// Rule is the automatic rule that fired, in words.
+	Rule string `json:"rule,omitempty"`
 }
 
 // Entry is one blocked address as shown in the panel.
@@ -66,9 +75,86 @@ type Manager struct {
 	Log      *slog.Logger
 	// Protected addresses can never be blocked (the WAF host itself, ...).
 	Protected []netip.Prefix
+	// Allow makes this the allow list instead of the blocklist.
+	Allow bool
 
 	mu   sync.Mutex
 	meta map[string]Meta
+	// ips is the group as last read from SafeLine, for Covers.
+	ips   []netip.Prefix
+	ipsAt time.Time
+}
+
+func (m *Manager) comment() string {
+	if m.Allow {
+		return AllowComment
+	}
+	return GroupComment
+}
+
+func (m *Manager) policyName() string {
+	if m.Allow {
+		return AllowPolicyName
+	}
+	return PolicyName
+}
+
+func (m *Manager) action() int {
+	if m.Allow {
+		return 0
+	}
+	return 1
+}
+
+// remember keeps the group's addresses for Covers.
+func (m *Manager) remember(ips []string) {
+	var ps []netip.Prefix
+	for _, s := range ips {
+		if s == placeholder {
+			continue
+		}
+		if a, err := netip.ParseAddr(s); err == nil {
+			ps = append(ps, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
+		} else if p, err := netip.ParsePrefix(s); err == nil {
+			ps = append(ps, p.Masked())
+		}
+	}
+	m.mu.Lock()
+	m.ips, m.ipsAt = ps, time.Now()
+	m.mu.Unlock()
+}
+
+// Covers reports whether ip is in the group, by itself or in a subnet. The
+// group is read again when the copy is older than a minute.
+func (m *Manager) Covers(ctx context.Context, ip string) (bool, error) {
+	a, err := netip.ParseAddr(ip)
+	if err != nil {
+		if p, perr := netip.ParsePrefix(ip); perr == nil {
+			a, err = p.Addr(), nil
+		} else {
+			return false, nil
+		}
+	}
+	m.mu.Lock()
+	stale := time.Since(m.ipsAt) > time.Minute
+	m.mu.Unlock()
+	if stale {
+		if _, _, err := m.ensure(ctx, false); err != nil {
+			return false, err
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.ContainsFunc(m.ips, func(p netip.Prefix) bool { return p.Contains(a.Unmap()) }), nil
+}
+
+// Meta returns what the panel knows about one entry.
+func (m *Manager) Meta(ip string) (Meta, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.load()
+	meta, ok := m.meta[ip]
+	return meta, ok
 }
 
 func (m *Manager) load() {
@@ -127,7 +213,7 @@ func (m *Manager) ensure(ctx context.Context, create bool) (group safeline.IPGro
 			return 0, err
 		}
 		for _, g := range gs {
-			if g.Comment == GroupComment && !g.Builtin {
+			if g.Comment == m.comment() && !g.Builtin {
 				return g.ID, nil
 			}
 		}
@@ -142,24 +228,25 @@ func (m *Manager) ensure(ctx context.Context, create bool) (group safeline.IPGro
 			return group, nil, nil
 		}
 		// SafeLine wants a non-empty list; a TEST-NET address keeps it valid.
-		if err := m.API.CreateIPGroup(ctx, GroupComment, []string{placeholder}); err != nil {
+		if err := m.API.CreateIPGroup(ctx, m.comment(), []string{placeholder}); err != nil {
 			return group, nil, err
 		}
 		if id, err = find(); err != nil || id == 0 {
 			return group, nil, fmt.Errorf("the group did not appear after creation: %v", err)
 		}
-		m.Log.Info("blocklist group created", "instance", m.Instance, "id", id)
+		m.Log.Info("ip group created", "instance", m.Instance, "group", m.comment(), "id", id)
 	}
 	if group, err = m.API.IPGroup(ctx, id); err != nil {
 		return group, nil, err
 	}
+	m.remember(group.IPs)
 	findPolicy := func() (*safeline.Policy, error) {
 		ps, err := m.API.Policies(ctx)
 		if err != nil {
 			return nil, err
 		}
 		for i, p := range ps {
-			if p.Builtin || p.Action != 1 || len(p.Pattern) != 1 || len(p.Pattern[0]) != 1 {
+			if p.Builtin || p.Action != m.action() || len(p.Pattern) != 1 || len(p.Pattern[0]) != 1 {
 				continue
 			}
 			c := p.Pattern[0][0]
@@ -173,13 +260,13 @@ func (m *Manager) ensure(ctx context.Context, create bool) (group safeline.IPGro
 		return group, nil, err
 	}
 	if policy == nil && create {
-		if err := m.API.CreateDenyGroupPolicy(ctx, PolicyName, id); err != nil {
+		if err := m.API.CreateGroupPolicy(ctx, m.policyName(), id, m.action()); err != nil {
 			return group, nil, err
 		}
 		if policy, err = findPolicy(); err != nil || policy == nil {
 			return group, nil, fmt.Errorf("the rule did not appear after creation: %v", err)
 		}
-		m.Log.Info("blocklist policy created", "instance", m.Instance, "id", policy.ID)
+		m.Log.Info("ip group rule created", "instance", m.Instance, "rule", m.policyName(), "id", policy.ID)
 	}
 	if policy != nil && !policy.IsEnabled && create {
 		if err := m.API.SetPolicyEnabled(ctx, policy.ID, true); err != nil {
@@ -222,21 +309,55 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 
 // Block adds an address; ttl 0 means until unblocked by hand.
 func (m *Manager) Block(ctx context.Context, ip, reason, by string, ttl time.Duration) error {
+	return m.BlockMany(ctx, []string{ip}, Meta{By: by, Reason: reason, Source: "manual"}, ttl)
+}
+
+// BlockMany adds addresses in one call with the same metadata; meta.At is
+// set to now and meta.Expires from ttl (0: until unblocked by hand).
+func (m *Manager) BlockMany(ctx context.Context, ips []string, meta Meta, ttl time.Duration) error {
 	g, _, err := m.ensure(ctx, true)
 	if err != nil {
 		return err
 	}
-	if !slices.Contains(g.IPs, ip) {
-		if err := m.API.AppendIPGroup(ctx, g.ID, []string{ip}); err != nil {
+	var add []string
+	for _, ip := range ips {
+		if !slices.Contains(g.IPs, ip) && !slices.Contains(add, ip) {
+			add = append(add, ip)
+		}
+	}
+	if len(add) > 0 {
+		if err := m.API.AppendIPGroup(ctx, g.ID, add); err != nil {
 			return err
 		}
+		m.remember(append(slices.Clone(g.IPs), add...))
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.load()
-	meta := Meta{By: by, Reason: reason, At: time.Now()}
+	meta.At = time.Now()
+	meta.Expires = time.Time{}
 	if ttl > 0 {
 		meta.Expires = meta.At.Add(ttl)
+	}
+	for _, ip := range ips {
+		m.meta[ip] = meta
+	}
+	return m.save()
+}
+
+// SetExpiry changes the term of a block the panel keeps; ttl 0 makes it
+// permanent.
+func (m *Manager) SetExpiry(ip string, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.load()
+	meta, ok := m.meta[ip]
+	if !ok {
+		meta = Meta{By: "console", Reason: "added in the SafeLine console", At: time.Now(), Source: "manual"}
+	}
+	meta.Expires = time.Time{}
+	if ttl > 0 {
+		meta.Expires = time.Now().Add(ttl)
 	}
 	m.meta[ip] = meta
 	return m.save()
@@ -255,6 +376,7 @@ func (m *Manager) Unblock(ctx context.Context, ip string) error {
 		if err := m.API.UpdateIPGroup(ctx, g); err != nil {
 			return err
 		}
+		m.remember(g.IPs)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

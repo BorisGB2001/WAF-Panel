@@ -27,6 +27,9 @@ type Collector struct {
 	// Backfill reads rotated logs on the first start.
 	Backfill bool
 	Log      *slog.Logger
+	// OnAccess sees every access line read, old ones from a backfill too;
+	// it must not block.
+	OnAccess func(Access, Client)
 
 	mu      sync.Mutex
 	cursors map[string]*Cursor
@@ -103,7 +106,11 @@ func (c *Collector) access(site string) func(string) {
 		}
 		c.status.Lines++
 		c.mu.Unlock()
-		c.Store.AddAccess(site, a, c.Geo.Lookup(a.IP), c.client(a.UA))
+		cl := c.client(a.UA)
+		c.Store.AddAccess(site, a, c.Geo.Lookup(a.IP), cl)
+		if c.OnAccess != nil {
+			c.OnAccess(a, cl)
+		}
 	}
 }
 

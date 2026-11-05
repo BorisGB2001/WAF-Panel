@@ -124,6 +124,16 @@
   </section>
 </div>
 
+<div class="grid2">
+  <section class="card"><h2>{{t "Devices"}}</h2>
+    <div class="donutbox">{{.DeviceDonut}}<ul class="legend">{{range .DeviceSlices}}<li><i class="s{{.Slot}}"></i><span>{{t .Label}}</span><b>{{num .Value}}</b><small>{{.Pct}}%</small></li>{{else}}<li class="muted">{{t "No data"}}</li>{{end}}</ul></div>
+  </section>
+  <section class="card"><h2>{{t "Where visitors come from"}}</h2>
+    <p class="muted small">{{t "Page requests of people: from search engines, social networks, other sites, or typed in directly."}}</p>
+    {{template "rows" .Sources}}
+  </section>
+</div>
+
 <div class="grid4">
   <section class="card"><h2>{{t "Response codes"}}</h2>{{template "rows" .Statuses}}</section>
   <section class="card"><h2>{{t "Methods"}}</h2>{{template "rows" .Methods}}</section>
@@ -140,11 +150,16 @@
   {{template "endpoints" .ErrPaths}}
 </section>
 
+<section class="card">
+  <div class="cardhead"><h2>{{t "Pages not found"}}</h2><span class="muted small">{{t "404 on pages, not on images or styles: broken links, or a scanner probing for files"}}</span></div>
+  {{template "rows" .NotFound}}
+</section>
+
 <div class="grid2">
   <section class="card"><h2>{{t "Top addresses"}}</h2>
     {{if .IPs}}<div class="scroll"><table class="compact">
       <thead><tr><th>IP</th><th>{{t "Location"}}</th><th class="num">{{t "Requests"}}</th><th class="num">4xx</th><th class="num">5xx</th><th></th></tr></thead>
-      <tbody>{{range .IPs}}<tr><td class="mono">{{.Key}}</td><td>{{if .Flag}}{{.Flag}} {{end}}{{.Label}}</td><td class="num">{{num .N}}</td><td class="num">{{num .E4}}</td><td class="num">{{num .E5}}</td><td class="nowrap"><a class="btn sm" href="/attacks?ip={{.Key}}&amp;period=30d">{{t "Attacks"}}</a></td></tr>{{end}}</tbody>
+      <tbody>{{range .IPs}}<tr><td class="mono"><a href="/ip/{{.Key}}">{{.Key}}</a></td><td>{{if .Flag}}{{.Flag}} {{end}}{{.Label}}</td><td class="num">{{num .N}}</td><td class="num">{{num .E4}}</td><td class="num">{{num .E5}}</td><td class="nowrap"><a class="btn sm" href="/attacks?ip={{.Key}}&amp;period=30d">{{t "Attacks"}}</a></td></tr>{{end}}</tbody>
     </table></div>{{else}}<p class="muted small">{{t "No data"}}</p>{{end}}
   </section>
   <section class="card"><h2>{{t "Hosts"}}</h2>{{template "rows" .Hosts}}</section>

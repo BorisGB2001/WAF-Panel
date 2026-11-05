@@ -39,8 +39,11 @@ func TestTrafficFromLogs(t *testing.T) {
 	col := &analytics.Collector{AccessDir: logs, Log: slog.New(slog.DiscardHandler),
 		Store: &analytics.Store{Dir: t.TempDir(), Retention: 90 * 24 * time.Hour}}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go col.Run(ctx)
+	done := make(chan struct{})
+	go func() { col.Run(ctx); close(done) }()
+	// The collector saves on its way out; let it finish before the
+	// temporary directories go.
+	defer func() { cancel(); <-done }()
 	for i := 0; col.Status().Lines < 50 && i < 100; i++ {
 		time.Sleep(20 * time.Millisecond)
 	}

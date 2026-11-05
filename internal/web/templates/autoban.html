@@ -1,0 +1,63 @@
+{{define "content"}}
+{{$d := .Data}}
+{{if not $d}}<div class="note warn">{{t "The auto-ban needs the web panel's data directory; it is not running."}}</div>{{else}}{{$s := $d.S}}
+{{if $d.DryRunFlag}}<div class="note warn">◐ {{t "The panel runs with -dry-run: decisions are recorded, nothing is blocked."}}</div>{{end}}
+<p class="muted">{{t "The auto-ban blocks addresses through the panel's IP blocklist in SafeLine. It never blocks private networks (a proxy in front of SafeLine has one), protected addresses or the allow list. A repeat offender is blocked for longer each time. Traps work whether the auto-ban is on or not."}} <a href="/traps">{{t "Traps"}} →</a></p>
+
+<form method="post" action="/autoban" class="grid2 autobanform">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <section class="card">
+    <div class="cardhead"><h2>{{t "From SafeLine's attack log"}}</h2>
+      {{if $s.Enabled}}{{if $s.DryRun}}<span class="badge warn">◐ {{t "dry run"}}</span>{{else}}<span class="badge good">● {{t "on"}}</span>{{end}}{{else}}<span class="badge">{{t "off"}}</span>{{end}}</div>
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{if $s.Enabled}}checked{{end}} {{if not $.IsAdmin}}disabled{{end}}> {{t "On"}}</label>
+    <label class="check"><input type="checkbox" name="dry_run" value="1" {{if $s.DryRun}}checked{{end}} {{if not $.IsAdmin}}disabled{{end}}> {{t "Dry run: only record whom it would block"}}</label>
+    <div class="row2">
+      <label>{{t "Denied requests"}}<input type="number" name="threshold" min="2" max="10000" value="{{$s.Threshold}}"></label>
+      <label>{{t "within, minutes"}}<input type="number" name="window" min="1" max="1440" value="{{$d.WindowMin}}"></label>
+    </div>
+    <fieldset><legend>{{t "Block on the first denied request of these types"}}</legend>
+      <div class="checks">{{range $d.Types}}<label class="check"><input type="checkbox" name="instant" value="{{.Value}}" {{if has $s.Instant .Value}}checked{{end}}> {{atype .Value}}</label>{{end}}</div>
+      <label>{{t "with a risk of at least"}}<select name="instant_risk"><option value="1" {{if eq $s.InstantRisk 1}}selected{{end}}>{{t "low"}}</option><option value="2" {{if eq $s.InstantRisk 2}}selected{{end}}>{{t "medium"}}</option><option value="3" {{if eq $s.InstantRisk 3}}selected{{end}}>{{t "high"}}</option></select></label>
+    </fieldset>
+    <label>{{t "Block durations by offence"}}<input name="durations" value="{{$d.Steps}}" placeholder="24h, 7d, 0"><small class="muted">{{t "1h, 24h, 7d, 30d or 0 for good, comma-separated: the first offence, the second, …; the last repeats"}}</small></label>
+  </section>
+
+  <section class="card">
+    <div class="cardhead"><h2>{{t "From the access logs"}}</h2>
+      {{if $s.AccessEnabled}}{{if $s.AccessDryRun}}<span class="badge warn">◐ {{t "dry run"}}</span>{{else}}<span class="badge good">● {{t "on"}}</span>{{end}}{{else}}<span class="badge">{{t "off"}}</span>{{end}}</div>
+    {{if not $d.HasLogs}}<div class="note warn small">{{t "No access logs are read: set logs.access_dir of an instance. Traps still work through their SafeLine rules."}}</div>{{end}}
+    <p class="muted small">{{t "Catches what the WAF does not see. Missing images and styles do not count; search engine bots are never banned."}}</p>
+    <label class="check"><input type="checkbox" name="access_enabled" value="1" {{if $s.AccessEnabled}}checked{{end}}> {{t "On"}}</label>
+    <label class="check"><input type="checkbox" name="access_dry_run" value="1" {{if $s.AccessDryRun}}checked{{end}}> {{t "Dry run: only record whom it would block"}}</label>
+    <label>{{t "Window, minutes"}}<input type="number" name="access_window" min="1" max="1440" value="{{$d.AccessMin}}"></label>
+    <div class="row3">
+      <label>{{t "Pages not found (404)"}}<input type="number" name="not_found" min="0" value="{{$s.NotFound}}"></label>
+      <label>{{t "Login attempts (POST)"}}<input type="number" name="logins" min="0" value="{{$s.Logins}}"></label>
+      <label>{{t "Requests a minute"}}<input type="number" name="rate" min="0" value="{{$s.Rate}}"></label>
+    </div>
+    <small class="muted">{{t "0 turns a limit off."}}</small>
+    <label>{{t "Login pages, one per line"}}<textarea name="login_paths" rows="5">{{$d.Logins}}</textarea></label>
+  </section>
+  {{if $.IsAdmin}}<div class="actions span2"><button class="btn primary">{{t "Save"}}</button></div>{{end}}
+</form>
+
+<section class="card">
+  <div class="cardhead"><h2>{{t "Decisions"}}</h2>
+    <div class="seg"><a class="{{if not $d.Show}}on{{end}}" href="/autoban">{{t "All"}}</a><a class="{{if eq $d.Show "blocked"}}on{{end}}" href="/autoban?show=blocked">{{t "Blocked"}}</a></div></div>
+  {{if $d.Decisions}}
+  <div class="scroll"><table>
+    <thead><tr><th>{{t "Time"}}</th><th>{{t "Address"}}</th><th>{{t "Site"}}</th><th>{{t "Rule"}}</th><th>{{t "Reason"}}</th><th>{{t "Term"}}</th><th>{{t "Result"}}</th></tr></thead>
+    <tbody>{{range $d.Decisions}}{{$dec := .}}<tr>
+      <td class="nowrap">{{dt .At}}</td>
+      <td class="mono"><a href="/ip/{{.IP}}">{{.IP}}</a>{{cc .IP}}</td>
+      <td>{{.Site}}</td>
+      <td>{{.Rule}}{{if gt .Offence 1}} <span class="badge bad" title="{{t "offence"}}">×{{.Offence}}</span>{{end}}</td>
+      <td class="small">{{.Reason}}{{range $i, $e := .Samples}} <a href="/attacks/{{$dec.Instance}}/{{$e}}">#{{add $i 1}}</a>{{end}}</td>
+      <td class="nowrap">{{term .Duration}}</td>
+      <td>{{template "result" .Result}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<p class="muted">{{t "No decisions yet."}}</p>{{end}}
+</section>
+{{end}}
+{{end}}

@@ -22,6 +22,12 @@ Set `logs.access_dir` and `logs.error_log` of the instance (see the example conf
 
 If almost all requests come from one private address, the sites sit behind another proxy that does not pass the client's address, and SafeLine takes the source IP from the connection. Locations, unique visitors, rate limits, attack sources and IP blocks then all see that proxy, and blocking its address blocks everyone. Make the proxy send `X-Forwarded-For` and set SafeLine to take the source IP from it.
 
+## Blocking safely
+
+Set `block.protected` to your own addresses: office, VPN, monitoring, and the front proxy if there is one. The panel never blocks them, by hand or automatically, and never blocks a private address automatically. Put trusted addresses on the allow list in WAF control; SafeLine then lets them through without checks.
+
+The auto-ban and the default traps start in dry run. Watch their decisions on the Auto-ban page for a while, then switch them to real blocking. `web.allow_from` limits who may open the panel at all.
+
 ## TLS
 
 Without `tls_cert`/`tls_key` the panel creates a self-signed certificate in `data_dir/tls`. It can reuse the certificate SafeLine serves for your sites (`/data/safeline/resources/nginx/certs/cert_N.crt|key`); the file is re-read when it changes, so a renewal in SafeLine needs no restart. `plain_http` is allowed only on a loopback address.
@@ -40,7 +46,9 @@ When the console certificate is issued for a name but `base_url` uses an IP, set
 | `/var/lib/wafpanel/session.key` | session signing key; deleting it ends every session |
 | `/var/lib/wafpanel/alerts-history.jsonl` | alert history |
 | `/var/lib/wafpanel/audit.log` | audit log |
-| `/var/lib/wafpanel/blocklist-<instance>.json` | who blocked an IP, why and until when |
+| `/var/lib/wafpanel/blocklist-<instance>.json` | who blocked an IP, why, by which rule and until when |
+| `/var/lib/wafpanel/allowlist-<instance>.json` | who allowed an IP and why |
+| `/var/lib/wafpanel/autoban.json` | auto-ban settings, offences, decisions and traps |
 | `/var/lib/wafpanel/analytics/` | traffic statistics from the logs, a file per site and day |
 | `/var/lib/wafpanel/GeoLite2-City.mmdb` | geo database copied from SafeLine's detector image by the installer |
 
@@ -51,7 +59,7 @@ When the console certificate is issued for a name but `base_url` uses an IP, set
 - Sessions: HMAC-signed `HttpOnly; Secure; SameSite=Strict` cookies, 12 hours; a password or role change ends every other session of that user.
 - CSRF token and `Origin` check on every POST.
 - Every change in SafeLine needs a reason; changing a site's mode, disabling or deleting a site needs the site name typed in. All of it goes to the audit log, failures included.
-- The blocklist refuses the requester's own address, the WAF host, loopback and subnets wider than /16 (IPv6 /48).
+- The blocklist refuses the requester's own address, the WAF host, `block.protected`, allowed addresses, loopback and subnets wider than /16 (IPv6 /48); a private address needs a confirmation, and automatic bans skip private networks.
 - The service runs as an unprivileged user with a read-only file system except `/var/lib/wafpanel` and no capabilities.
 
 To reset a password: `sudo -u wafpanel wafpanel -config /etc/wafpanel/wafpanel.yaml -reset-password admin` (as `wafpanel`, not root, so the users file stays readable by the service).

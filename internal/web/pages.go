@@ -90,7 +90,7 @@ var periods = []struct{ Key, Label string }{
 	{"1h", "1 hour"}, {"24h", "24 hours"}, {"7d", "7 days"}, {"30d", "30 days"}, {"all", "All time"},
 }
 
-func (s *Server) parseAttackQuery(r *http.Request) (attackQuery, safeline.RecordFilter, *safeline.Client) {
+func (s *Server) parseAttackQuery(w http.ResponseWriter, r *http.Request) (attackQuery, safeline.RecordFilter, *safeline.Client) {
 	q := r.URL.Query()
 	aq := attackQuery{
 		Instance: q.Get("instance"), IP: strings.TrimSpace(q.Get("ip")), Host: strings.TrimSpace(q.Get("host")),
@@ -98,9 +98,9 @@ func (s *Server) parseAttackQuery(r *http.Request) (attackQuery, safeline.Record
 	}
 	aq.Page, _ = strconv.Atoi(q.Get("page"))
 	aq.Page = max(aq.Page, 1)
-	if aq.Period == "" {
-		aq.Period = "24h"
-	}
+	aq.Period = s.period(w, r, "attacks", "24h", func(k string) bool {
+		return slices.ContainsFunc(periods, func(p struct{ Key, Label string }) bool { return p.Key == k })
+	})
 	c := s.client(aq.Instance)
 	if c == nil {
 		c = s.Clients[0]
@@ -157,7 +157,7 @@ func attackTypeOptions() []typeOption {
 }
 
 func (s *Server) attacks(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
-	aq, f, c := s.parseAttackQuery(r)
+	aq, f, c := s.parseAttackQuery(w, r)
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	rows, total, err := c.SearchRecords(ctx, f)
@@ -166,7 +166,15 @@ func (s *Server) attacks(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
 		p.Error = "SafeLine: " + err.Error()
 	}
 	pages := int((total + int64(f.Size) - 1) / int64(f.Size))
-	p.Data = map[string]any{
+	blocked, why := map[string]bool{}, map[string]string{}
+	for _, x := range rows {
+		if _, ok := blocked[x.SrcIP]; !ok {
+			ok, _ := s.blocklist(c).Covers(ctx, x.SrcIP)
+			blocked[x.SrcIP] = ok
+			why[x.SrcIP] = s.whyNot(ctx, c, x.SrcIP, true)
+		}
+	}
+	p.Data = map[string]any{"Blocked": blocked, "Why": why,
 		"Q": aq, "Rows": rows, "Total": total, "Pages": pages, "Instances": s.Clients,
 		"Types": attackTypeOptions(), "Periods": periods,
 		"Prev": aq.URLWith(aq.Page - 1), "Next": aq.URLWith(aq.Page + 1), "CSV": aq.URLWith(0),
@@ -177,7 +185,7 @@ func (s *Server) attacks(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
 const csvMax = 10000
 
 func (s *Server) attacksCSV(w http.ResponseWriter, r *http.Request, rc *reqCtx) {
-	aq, f, c := s.parseAttackQuery(r)
+	aq, f, c := s.parseAttackQuery(w, r)
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 	var buf bytes.Buffer

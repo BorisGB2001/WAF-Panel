@@ -7,8 +7,14 @@
   <div class="urlline"><span class="badge bad">{{atype $r.AttackType}}</span><span>{{$d.Scheme}}://{{$r.Host}}{{$r.URLPath}}</span></div>
   <dl class="kv">
     <dt>{{t "Attacker IP"}}</dt><dd class="mono">{{$r.SrcIP}}{{if $d.SrcPort}}:{{$d.SrcPort}}{{end}} {{if ne $r.SocketIP $r.SrcIP}}({{t "socket %s" $r.SocketIP}}){{end}} {{$r.Country}} {{$r.City}}
+      · <a href="/ip/{{$r.SrcIP}}">{{t "everything about this address"}}</a>
       · <a href="/attacks?instance={{$d.Instance.ID}}&amp;period=30d&amp;ip={{$r.SrcIP}}">{{t "all attacks from this IP"}}</a>
       {{if .IsAdmin}}· <a class="bad" href="/waf?instance={{$d.Instance.ID}}&amp;block={{$r.SrcIP}}#block">{{t "block this IP"}}</a>{{end}}</dd>
+    {{if .IsAdmin}}<dt>{{t "Ban everyone"}}</dt><dd>{{t "who did the same in 24 hours:"}}
+      <a href="/massban?instance={{$d.Instance.ID}}&amp;by=type&amp;value={{$r.AttackType}}&amp;host={{urlquery $r.Host}}">{{t "this attack type on this site"}}</a>
+      · <a href="/massban?instance={{$d.Instance.ID}}&amp;by=path&amp;value={{urlquery $r.URLPath}}&amp;host={{urlquery $r.Host}}">{{t "this path"}}</a>
+      {{if $r.RuleID}}· <a href="/massban?instance={{$d.Instance.ID}}&amp;by=rule&amp;value={{urlquery $r.RuleID}}">{{t "this rule"}}</a>{{end}}
+      · <a href="/traps?path={{urlquery $r.URLPath}}">{{t "set a trap on this path"}}</a></dd>{{end}}
     <dt>{{t "Payload"}}</dt><dd>{{if $d.Location}}<span class="badge info">{{$d.Location}}</span> {{end}}<code class="hl">{{if $d.Payload}}{{$d.Payload}}{{else}}—{{end}}</code></dd>
     <dt>{{t "Module / rule"}}</dt><dd class="mono">{{$d.Module}} {{$r.RuleID}}</dd>
     <dt>{{t "Risk"}}</dt><dd>{{template "risk" $r.RiskLevel}}</dd>

@@ -167,16 +167,17 @@ func (c *Client) Policies(ctx context.Context) ([]Policy, error) {
 	return all, nil
 }
 
-// CreateDenyGroupPolicy adds an enabled, logged rule that denies every
-// source IP in the group. It goes first, like a new rule in the console,
-// so an explicit block wins over allow rules further down.
-func (c *Client) CreateDenyGroupPolicy(ctx context.Context, name string, groupID int) error {
+// CreateGroupPolicy adds an enabled, logged rule that denies (action 1)
+// or allows (action 0) every source IP in the group. It goes first, like a
+// new rule in the console, so an explicit block wins over allow rules
+// further down.
+func (c *Client) CreateGroupPolicy(ctx context.Context, name string, groupID, action int) error {
 	return c.send(ctx, http.MethodPost, "/api/open/policy", map[string]any{
 		"name":            name,
 		"is_enabled":      true,
 		"pattern":         [][]PolicyPattern{{{K: "src_ip", Op: "in", V: []string{strconv.Itoa(groupID)}}}},
 		"auth_source_ids": []int{},
-		"action":          1,
+		"action":          action,
 		"log":             true,
 		"monitor":         false,
 		"insert_position": "first",
